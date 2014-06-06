@@ -7,5 +7,5 @@ class HelloPlugin(WillPlugin):
 
     @respond_to("^hello")
     def hello(self, message):
-        self.reply(message, "hi!")
-    
+        self.reply(message, "yo!")
+
