@@ -93,7 +93,7 @@ class ShowPlugin(WillPlugin):
         self.say("/code {}".format("\n".join(output)), message)
 
 
-    @respond_to("(noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\w*)*)")
+    @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\w*)*)")
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
         versions_dict = {}
@@ -107,7 +107,7 @@ class ShowPlugin(WillPlugin):
             ec2 = boto.connect_ec2()
             edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
             ec2 = boto.connect_ec2()
-            ami = ec2.get_all_images(ami_di)[0]
+            ami = ec2.get_all_images(ami_id)[0]
             for tag, value in ami.tags.items():
                 if tag.startswith('refs:'):
                     key = tag[5:]
@@ -125,8 +125,13 @@ class ShowPlugin(WillPlugin):
         output += "With vars:\n"
         for version in versions.split():
             var, value = version.split('=')
-            versions_dict[var] = value
-            output += "{}: {}\n".format(var, value)
+            if var == 'configuration':
+                configuration_ref = value
+            elif var == 'configuration_secure':
+                configuration_secure_ref = value
+            else:
+                versions_dict[var] = value
+                output += "{}: {}\n".format(var, value)
 
         self.say(output, message)
         self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop)
