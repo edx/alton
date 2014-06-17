@@ -93,7 +93,7 @@ class ShowPlugin(WillPlugin):
         self.say("/code {}".format("\n".join(output)), message)
 
 
-    @respond_to("(noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\w*)*)")
+    @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\w*)*)")
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
         versions_dict = {}
