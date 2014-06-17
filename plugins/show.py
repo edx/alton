@@ -146,7 +146,7 @@ class ShowPlugin(WillPlugin):
             self.say("The JENKINS_URL environment setting needs to be set so I can build AMIs.", message, color='red')
             return False
         else:
-            abbey_url = settings.get('JENKINS_URL', 'http://10.254.2.119:8080/buildByToken/buildWithParameters?job=build-ami-copy&token=MULTIPASS')
+            abbey_url = settings.JENKINS_URL
             params = {}
             params['play'] = play
             params['deployment'] = dep
