@@ -6,6 +6,7 @@ import yaml
 import requests
 from itertools import izip_longest
 from pprint import pformat
+from will import settings
 from will.plugin import WillPlugin
 from will.decorators import respond_to, periodic, hear, randomly, route, rendered_template
 
