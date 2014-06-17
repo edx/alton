@@ -1,1 +1,3 @@
-will
+will==0.4.8
+boto==2.29.1
+PyYAML==3.11
