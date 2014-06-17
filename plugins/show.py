@@ -107,7 +107,7 @@ class ShowPlugin(WillPlugin):
             ec2 = boto.connect_ec2()
             edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
             ec2 = boto.connect_ec2()
-            ami = ec2.get_all_images(ami_di)[0]
+            ami = ec2.get_all_images(ami_id)[0]
             for tag, value in ami.tags.items():
                 if tag.startswith('refs:'):
                     key = tag[5:]
