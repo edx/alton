@@ -101,6 +101,7 @@ class ShowPlugin(WillPlugin):
         self.say("Let me get what I need to build the ami...", message)
 
         if ami_id:
+            # Lookup the AMI and use its settings.
             self.say("Looking up ami {}".format(ami_id), message)
             ec2 = boto.connect_ec2()
             edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
@@ -116,17 +117,18 @@ class ShowPlugin(WillPlugin):
                 if tag == 'configuration_secure_ref':
                     configuration_secure_ref = value
 
-        output = "Building ami for {}-{}-{} with base ami {} and versions:\n".format(env, dep, play, ami_id)
+        output = "Building ami for {}-{}-{}:\n".format(env, dep, play)
+        if ami_id:
+            output += "With base ami: {}\n".format(ami_id)
+
+        output += "With vars:\n"
         for version in versions.split():
             var, value = version.split('=')
             versions_dict[var] = value
             output += "{}: {}\n".format(var, value)
 
-        # Lookup the AMI and use its settings.
-
-        logging.info("Notifying Abbey...")
-        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop)
         self.say(output, message)
+        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop)
 
     def instance_elbs(self, instance_id):
         elb = boto.connect_elb()
@@ -138,9 +140,12 @@ class ShowPlugin(WillPlugin):
 
     def notify_abbey(self, message, env, dep, play, versions,
                      configuration_ref, configuration_secure_ref, noop=False):
-        abbey_url = os.getenv('JENKINS_URL', 'http://10.254.2.119:8080/buildByToken/buildWithParameters?job=build-ami-copy&token=MULTIPASS')
 
-        if True:
+        if not hasattr(settings, 'JENKINS_URL'):
+            self.say("The JENKINS_URL environment setting needs to be set so I can build AMIs.", message, color='red')
+            return False
+        else:
+            abbey_url = settings.get('JENKINS_URL', 'http://10.254.2.119:8080/buildByToken/buildWithParameters?job=build-ami-copy&token=MULTIPASS')
             params = {}
             params['play'] = play
             params['deployment'] = dep
