@@ -125,8 +125,13 @@ class ShowPlugin(WillPlugin):
         output += "With vars:\n"
         for version in versions.split():
             var, value = version.split('=')
-            versions_dict[var] = value
-            output += "{}: {}\n".format(var, value)
+            if var == 'configuration':
+                configuration_ref = value
+            elif var == 'configuration_secure':
+                configuration_secure_ref = value
+            else:
+                versions_dict[var] = value
+                output += "{}: {}\n".format(var, value)
 
         self.say(output, message)
         self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop)
