@@ -22,7 +22,8 @@ class ShowPlugin(WillPlugin):
 
     def show_plays(self, message, env, dep):
         logging.info("Getting all plays in {}-{}".format(env,dep))
-        ec2 = boto.connect_ec2()
+        ec2 = boto.connect_ec2(profile_name=dep)
+
         instance_filter = { "tag:environment": env, "tag:deployment": dep }
         instances = ec2.get_all_instances(filters=instance_filter)
 
@@ -40,7 +41,7 @@ class ShowPlugin(WillPlugin):
 
     def show_edp(self, message, env, dep, play):
         self.say("Reticulating splines...", message)
-        ec2 = boto.connect_ec2()
+        ec2 = boto.connect_ec2(profile_name=dep)
         edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
         instances = ec2.get_all_instances(filters=edp_filter)
 
@@ -56,13 +57,10 @@ class ShowPlugin(WillPlugin):
                 ami_id = instance.image_id
                 for ami in ec2.get_all_images(ami_id):
                     for name, value in ami.tags.items():
-                        if name.startswith('refs:'):
-                            refs.append("{}: {}".format(name[5:], value))
+                        if name.startswith('version:'):
+                            refs.append("{}={}".format(name[8:], value.split()[1]))
 
-                        if name.endswith("_ref"):
-                            refs.append("{}: {}".format(name, value))
-
-                elbs = map(lambda x: x.name, self.instance_elbs(instance.id))
+                elbs = map(lambda x: x.name, self.instance_elbs(instance.id, dep))
 
                 for instance, ref, elb, ami in izip_longest(
                   [instance.private_dns_name],
@@ -104,25 +102,24 @@ class ShowPlugin(WillPlugin):
         if ami_id:
             # Lookup the AMI and use its settings.
             self.say("Looking up ami {}".format(ami_id), message)
-            ec2 = boto.connect_ec2()
+            ec2 = boto.connect_ec2(profile_name=dep)
             edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
-            ec2 = boto.connect_ec2()
             ami = ec2.get_all_images(ami_id)[0]
             for tag, value in ami.tags.items():
-                if tag.startswith('refs:'):
-                    key = tag[5:]
-                    versions_dict[key] = value
+                if tag.startswith('version:'):
+                    key = tag[8:].strip()
+                    shorthash = value.split()[1]
+                    if key == 'configuration':
+                        configuration_ref = shorthash
+                    elif key == 'configuration_secure':
+                        configuration_secure_ref = shorthash
+                    else:
+                        key = "{}_version".format(tag[8:])
+                        # This is to deal with the fact that some
+                        # versions are upper case and some are lower case.
+                        versions_dict[key.lower()] = shorthash
+                        versions_dict[key.upper()] = shorthash
 
-                if tag == 'configuration_ref':
-                    configuration_ref = value
-                if tag == 'configuration_secure_ref':
-                    configuration_secure_ref = value
-
-        output = "Building ami for {}-{}-{}:\n".format(env, dep, play)
-        if ami_id:
-            output += "With base ami: {}\n".format(ami_id)
-
-        output += "With vars:\n"
         for version in versions.split():
             var, value = version.split('=')
             if var == 'configuration':
@@ -130,14 +127,13 @@ class ShowPlugin(WillPlugin):
             elif var == 'configuration_secure':
                 configuration_secure_ref = value
             else:
-                versions_dict[var] = value
-                output += "{}: {}\n".format(var, value)
+                versions_dict[var.lower()] = value
+                versions_dict[var.upper()] = value
 
-        self.say(output, message)
-        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop)
+        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, ami_id)
 
-    def instance_elbs(self, instance_id):
-        elb = boto.connect_elb()
+    def instance_elbs(self, instance_id, profile_name=None):
+        elb = boto.connect_elb(profile_name=profile_name)
         elbs = elb.get_all_load_balancers()
         for lb in elbs:
             lb_instance_ids = [inst.id for inst in lb.instances]
@@ -145,7 +141,7 @@ class ShowPlugin(WillPlugin):
                 yield lb
 
     def notify_abbey(self, message, env, dep, play, versions,
-                     configuration_ref, configuration_secure_ref, noop=False):
+                     configuration_ref, configuration_secure_ref, noop=False, ami_id=None):
 
         if not hasattr(settings, 'JENKINS_URL'):
             self.say("The JENKINS_URL environment setting needs to be set so I can build AMIs.", message, color='red')
@@ -156,12 +152,29 @@ class ShowPlugin(WillPlugin):
             params['play'] = play
             params['deployment'] = dep
             params['environment'] = env
-            params['refs'] = yaml.safe_dump(versions, default_flow_style=False)
+            params['vars'] = yaml.safe_dump(versions, default_flow_style=False)
             params['configuration'] = configuration_ref
             params['configuration_secure'] = configuration_secure_ref
-            params['use_blessed'] = True
+            if ami_id:
+                params['base_ami'] = ami_id
+                params['use_blessed'] = False
+            else:
+                params['use_blessed'] = True
 
             logging.info("Need ami for {}".format(pformat(params)))
+
+            output = "Building ami for {}-{}-{}\n".format(env, dep, play)
+            if ami_id:
+                output += "With base ami: {}\n".format(ami_id)
+
+            display_params = dict(params)
+            display_params['vars'] = versions
+            output += yaml.safe_dump(
+                {"Params" : display_params },
+                default_flow_style=False)
+
+            self.say(output, message)
+
             if noop:
                 r = requests.Request('POST', abbey_url, params=params)
                 url = r.prepare().url
