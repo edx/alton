@@ -20,6 +20,16 @@ class ShowPlugin(WillPlugin):
         else:
             self.show_edp(message, env, dep, play)
 
+    @respond_to("show (?P<deployment>\w*) (?P<ami_id>ami-\w*)")
+    def show_ami(self, message, deployment, ami_id):
+        ec2 = boto.connect_ec2(profile_name=deployment)
+        amis = ec2.get_all_images(ami_id)
+        if len(amis) == 0:
+            self.say("No ami found with id {}".format(ami_id), message)
+        else:
+            for ami in amis:
+                self.say("/code {}".format(pformat(ami.tags)), message)
+
     def show_plays(self, message, env, dep):
         logging.info("Getting all plays in {}-{}".format(env,dep))
         ec2 = boto.connect_ec2(profile_name=dep)
@@ -91,7 +101,7 @@ class ShowPlugin(WillPlugin):
         self.say("/code {}".format("\n".join(output)), message)
 
 
-    @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\w*)*)")
+    @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\S*)*)")
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
         versions_dict = {}
