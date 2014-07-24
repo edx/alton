@@ -105,8 +105,8 @@ class ShowPlugin(WillPlugin):
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
         versions_dict = {}
-        configuration_ref=""
-        configuration_secure_ref=""
+        configuration_ref="master"
+        configuration_secure_ref="master"
         self.say("Let me get what I need to build the ami...", message)
 
         if ami_id:
@@ -115,6 +115,7 @@ class ShowPlugin(WillPlugin):
             ec2 = boto.connect_ec2(profile_name=dep)
             edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
             ami = ec2.get_all_images(ami_id)[0]
+            # Build the versions_dict to have all versions defined in the ami tags
             for tag, value in ami.tags.items():
                 if tag.startswith('version:'):
                     key = tag[8:].strip()
@@ -193,9 +194,9 @@ class ShowPlugin(WillPlugin):
                 r = requests.post(abbey_url, params=params)
 
                 logging.info("Sent request got {}".format(r))
-                self.say("Sent request got {}".format(r), message)
+                message_color='green'
                 if r.status_code != 200:
-                    # Something went wrong.
-                    msg = "Failed to submit request with params: \n{}"
-                    self.say(msg.format(pformat(params)), message, color="red")
+                    message_color = 'red'
 
+                self.say("Sent request got {}".format(r),
+                    message, color=message_color)
