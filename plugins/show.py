@@ -22,6 +22,7 @@ class ShowPlugin(WillPlugin):
 
     @respond_to("show (?P<deployment>\w*) (?P<ami_id>ami-\w*)")
     def show_ami(self, message, deployment, ami_id):
+        """show deployment <ami_id>: show tags for the ami"""
         ec2 = boto.connect_ec2(profile_name=deployment)
         amis = ec2.get_all_images(ami_id)
         if len(amis) == 0:
@@ -131,6 +132,7 @@ class ShowPlugin(WillPlugin):
                         versions_dict[key.lower()] = shorthash
                         versions_dict[key.upper()] = shorthash
 
+        # Override the ami and defaults with the setting from the command
         for version in versions.split():
             var, value = version.split('=')
             if var == 'configuration':
