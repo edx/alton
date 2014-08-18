@@ -10,6 +10,9 @@ from will import settings
 from will.plugin import WillPlugin
 from will.decorators import respond_to, periodic, hear, randomly, route, rendered_template
 
+class TooManyImagesException(Exception):
+    pass
+
 class ShowPlugin(WillPlugin):
 
     @respond_to("show (?P<env>\w*)(-(?P<dep>\w*))(-(?P<play>\w*))?")
@@ -50,6 +53,20 @@ class ShowPlugin(WillPlugin):
         output.extend(list(plays))
         self.say("/code {}".format("\n".join(output)), message)
 
+    def get_ami_for_edp(self, env, dep, play):
+        ec2 = boto.connect_ec2(profile_name=dep)
+        edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
+        reservations = ec2.get_all_instances(filters=edp_filter)
+        amis = set()
+        for reservation in reservations:
+            for instance in reservation.instances:
+                amis.add(instance.image_id)
+
+        if len(amis) > 1:
+            raise TooManyImagesException("Multiple AMIs found for EDP({}-{}-{})".format(env,dep,play))
+
+        return amis.pop()
+        
     def show_edp(self, message, env, dep, play):
         self.say("Reticulating splines...", message)
         ec2 = boto.connect_ec2(profile_name=dep)
@@ -101,6 +118,28 @@ class ShowPlugin(WillPlugin):
         logging.error(output_table)
         self.say("/code {}".format("\n".join(output)), message)
 
+    def get_ami_versions(self, profile, ami_id):
+        versions_dict = {}
+        ec2 = boto.connect_ec2(profile_name=profile)
+        ami = ec2.get_all_images(ami_id)[0]
+        # Build the versions_dict to have all versions defined in the ami tags
+        for tag, value in ami.tags.items():
+            if tag.startswith('version:'):
+                key = tag[8:].strip()
+                shorthash = value.split()[1]
+                if key == 'configuration':
+                    configuration_ref = shorthash
+                elif key == 'configuration_secure':
+                    configuration_secure_ref = shorthash
+                else:
+                    key = "{}_version".format(tag[8:])
+                    # This is to deal with the fact that some
+                    # versions are upper case and some are lower case.
+                    versions_dict[key.lower()] = shorthash
+                    versions_dict[key.upper()] = shorthash
+
+        return (versions_dict, configuration_ref, configuration_secure_ref)
+
 
     @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\S*)*)")
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
@@ -113,26 +152,10 @@ class ShowPlugin(WillPlugin):
         if ami_id:
             # Lookup the AMI and use its settings.
             self.say("Looking up ami {}".format(ami_id), message)
-            ec2 = boto.connect_ec2(profile_name=dep)
-            edp_filter = { "tag:environment" : env, "tag:deployment": dep, "tag:play": play }
-            ami = ec2.get_all_images(ami_id)[0]
-            # Build the versions_dict to have all versions defined in the ami tags
-            for tag, value in ami.tags.items():
-                if tag.startswith('version:'):
-                    key = tag[8:].strip()
-                    shorthash = value.split()[1]
-                    if key == 'configuration':
-                        configuration_ref = shorthash
-                    elif key == 'configuration_secure':
-                        configuration_secure_ref = shorthash
-                    else:
-                        key = "{}_version".format(tag[8:])
-                        # This is to deal with the fact that some
-                        # versions are upper case and some are lower case.
-                        versions_dict[key.lower()] = shorthash
-                        versions_dict[key.upper()] = shorthash
+            ami_versions = self.get_ami_versions(self, dep, ami_id)
+            versions_dict, configuration_ref, configuration_secure_ref = ami_versions
 
-        # Override the ami and defaults with the setting from the command
+        # Override the ami and defaults with the setting from the user
         for version in versions.split():
             var, value = version.split('=')
             if var == 'configuration':
@@ -144,6 +167,26 @@ class ShowPlugin(WillPlugin):
                 versions_dict[var.upper()] = value
 
         self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, ami_id)
+
+    @respond_to("(?<noop>noop )?update (?P<configuration>configuration )?(?P<configuration_secure)configuration_secure )?for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)")
+    def update_configuration(self, message, configuration, configuration_secure, env, dep, play, noop):
+        try:
+            running_ami = self.get_ami_for_edp(env,dep,play)
+        except TooManyImagesException as e:
+            msg = e.message
+            msg += " Please resolve any running updates before running this command."
+            self.say(msg, message, color='red')
+
+        ami_versions = self.get_ami_versions(dep, running_ami)
+        versions_dict, configuration_ref, configuration_secure_ref = ami_versions
+        
+        # Update configuration to master
+        if configuration:
+            configuration_ref = 'master'
+        if configuration_secure:
+            configuration_secure_ref = 'master'
+
+        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, running_ami)
 
     def instance_elbs(self, instance_id, profile_name=None):
         elb = boto.connect_elb(profile_name=profile_name)
