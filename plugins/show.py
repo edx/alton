@@ -60,7 +60,8 @@ class ShowPlugin(WillPlugin):
         amis = set()
         for reservation in reservations:
             for instance in reservation.instances:
-                amis.add(instance.image_id)
+                if instance.state == 'running':
+                    amis.add(instance.image_id)
 
         if len(amis) > 1:
             raise TooManyImagesException("Multiple AMIs found for EDP({}-{}-{})".format(env,dep,play))
@@ -152,7 +153,7 @@ class ShowPlugin(WillPlugin):
         if ami_id:
             # Lookup the AMI and use its settings.
             self.say("Looking up ami {}".format(ami_id), message)
-            ami_versions = self.get_ami_versions(self, dep, ami_id)
+            ami_versions = self.get_ami_versions(dep, ami_id)
             versions_dict, configuration_ref, configuration_secure_ref = ami_versions
 
         # Override the ami and defaults with the setting from the user
@@ -168,14 +169,16 @@ class ShowPlugin(WillPlugin):
 
         self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, ami_id)
 
-    @respond_to("(?<noop>noop )?update (?P<configuration>configuration )?(?P<configuration_secure)configuration_secure )?for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)")
+    @respond_to("(?P<noop>noop )?update (?P<configuration>configuration )?(?P<configuration_secure>configuration_secure )?for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)")
     def update_configuration(self, message, configuration, configuration_secure, env, dep, play, noop):
+        running_ami = None
         try:
             running_ami = self.get_ami_for_edp(env,dep,play)
         except TooManyImagesException as e:
             msg = e.message
-            msg += " Please resolve any running updates before running this command."
+            msg += " Please resolve any running updates before building new AMIs."
             self.say(msg, message, color='red')
+            return
 
         ami_versions = self.get_ami_versions(dep, running_ami)
         versions_dict, configuration_ref, configuration_secure_ref = ami_versions
