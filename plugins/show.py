@@ -200,7 +200,7 @@ class ShowPlugin(WillPlugin):
                 yield lb
 
     def notify_abbey(self, message, env, dep, play, versions,
-                     configuration_ref, configuration_secure_ref, noop=False, ami_id=None):
+                     configuration_ref, configuration_secure_ref, noop=False, ami_id=None, verbose=False):
 
         if not hasattr(settings, 'JENKINS_URL'):
             self.say("The JENKINS_URL environment setting needs to be set so I can build AMIs.", message, color='red')
@@ -223,14 +223,15 @@ class ShowPlugin(WillPlugin):
             logging.info("Need ami for {}".format(pformat(params)))
 
             output = "Building ami for {}-{}-{}\n".format(env, dep, play)
-            if ami_id:
-                output += "With base ami: {}\n".format(ami_id)
-
-            display_params = dict(params)
-            display_params['vars'] = versions
-            output += yaml.safe_dump(
-                {"Params" : display_params },
-                default_flow_style=False)
+            if verbose:
+                if ami_id:
+                    output += "With base ami: {}\n".format(ami_id)
+    
+                display_params = dict(params)
+                display_params['vars'] = versions
+                output += yaml.safe_dump(
+                    {"Params" : display_params },
+                    default_flow_style=False)
 
             self.say(output, message)
 
@@ -244,7 +245,5 @@ class ShowPlugin(WillPlugin):
                 logging.info("Sent request got {}".format(r))
                 message_color='green'
                 if r.status_code != 200:
-                    message_color = 'red'
-
-                self.say("Sent request got {}".format(r),
-                    message, color=message_color)
+                    self.say("Sent request got {}".format(r),
+                        message, color='red')
