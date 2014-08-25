@@ -81,6 +81,8 @@ class ShowPlugin(WillPlugin):
 
         for reservation in instances:
             for instance in reservation.instances:
+                if instance.state != 'running':
+                    continue
                 logging.info("Getting info for: {}".format(instance.private_dns_name))
                 refs = []
                 ami_id = instance.image_id
