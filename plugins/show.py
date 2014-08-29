@@ -125,6 +125,8 @@ class ShowPlugin(WillPlugin):
         versions_dict = {}
         ec2 = boto.connect_ec2(profile_name=profile)
         ami = ec2.get_all_images(ami_id)[0]
+        configuration_ref = None
+        configuration_secure_ref = None
         # Build the versions_dict to have all versions defined in the ami tags
         for tag, value in ami.tags.items():
             if tag.startswith('version:'):
@@ -143,13 +145,12 @@ class ShowPlugin(WillPlugin):
 
         return (versions_dict, configuration_ref, configuration_secure_ref)
 
-
     @respond_to("(?P<noop>noop )?cut ami for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)( from (?P<ami_id>ami-\w*))? with(?P<versions>( \w*=\S*)*)")
     def build_ami(self, message, env, dep, play, versions, ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
         versions_dict = {}
-        configuration_ref="master"
-        configuration_secure_ref="master"
+        configuration_ref = None
+        configuration_secure_ref = None
         self.say("Let me get what I need to build the ami...", message)
 
         if ami_id:
@@ -157,6 +158,11 @@ class ShowPlugin(WillPlugin):
             self.say("Looking up ami {}".format(ami_id), message)
             ami_versions = self.get_ami_versions(dep, ami_id)
             versions_dict, configuration_ref, configuration_secure_ref = ami_versions
+
+        if configuration_ref == None:
+            configuration_ref="master"
+        if configuration_secure_ref == None:
+            configuration_secure_ref="master"
 
         # Override the ami and defaults with the setting from the user
         for version in versions.split():
