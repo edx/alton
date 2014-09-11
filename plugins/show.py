@@ -177,28 +177,6 @@ class ShowPlugin(WillPlugin):
 
         self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, ami_id)
 
-    @respond_to("(?P<noop>noop )?update (?P<configuration>configuration )?(?P<configuration_secure>configuration_secure )?for (?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)")
-    def update_configuration(self, message, configuration, configuration_secure, env, dep, play, noop):
-        running_ami = None
-        try:
-            running_ami = self.get_ami_for_edp(env,dep,play)
-        except TooManyImagesException as e:
-            msg = e.message
-            msg += " Please resolve any running updates before building new AMIs."
-            self.say(msg, message, color='red')
-            return
-
-        ami_versions = self.get_ami_versions(dep, running_ami)
-        versions_dict, configuration_ref, configuration_secure_ref = ami_versions
-        
-        # Update configuration to master
-        if configuration:
-            configuration_ref = 'master'
-        if configuration_secure:
-            configuration_secure_ref = 'master'
-
-        self.notify_abbey(message, env, dep, play, versions_dict, configuration_ref, configuration_secure_ref, noop, running_ami)
-
     def instance_elbs(self, instance_id, profile_name=None):
         elb = boto.connect_elb(profile_name=profile_name)
         elbs = elb.get_all_load_balancers()
