@@ -9,10 +9,6 @@ from will.plugin import WillPlugin
 from will.decorators import respond_to
 
 
-class TooManyImagesException(Exception):
-    pass
-
-
 class Versions():
 
     def __init__(self, configuration_ref, configuration_secure_ref, versions):
@@ -21,7 +17,7 @@ class Versions():
         configuration_secure_ref: The git ref for configuration_secure
         versions: A dict mapping version vars('.*_version') to gitrefs.
         """
-        self.configurations = configuration_ref
+        self.configuration = configuration_ref
         self.configuration_secure = configuration_secure_ref
         self.play_versions = versions
 
@@ -260,9 +256,8 @@ class ShowPlugin(WillPlugin):
             message, source_env, source_dep, source_play)
         if source_running_ami is None:
             return
-
         source_versions = self.get_ami_versions(
-            source_dep, source_running_ami, message)
+            source_dep, source_running_ami)
 
         # Get the active destination AMI.  The one we're gonna
         # use as a base for our build.
@@ -272,7 +267,58 @@ class ShowPlugin(WillPlugin):
             return
 
         final_versions = self.update_from_versions_string(
-            source_versions, version_overrides)
+            source_versions, version_overrides, message)
+
+        # When building accross deployments and not overriding
+        # configuration_secure.
+        if dest_dep != source_dep \
+           and (version_overrides is None
+                or "configuration_secure" not in version_overrides):
+
+            dest_versions = self.get_ami_versions(
+                dest_dep, dest_running_ami)
+
+            final_versions.configuration_secure = \
+                dest_versions.configuration_secure
+
+            msg = ("Warning: {dest_dep} uses a different repository for "
+                   "tracking secrets so the version of configuration_secure "
+                   "from {source_env}-{source_dep} doesn't make sense to use "
+                   "for the {dest_dep} AMI.  The new {dest_dep} AMI will "
+                   "not override the current version of configuration_secure "
+                   "on {dest_env}-{dest_dep}-{dest_play}({dest_secure_ref}). "
+                   "If you would like to update the secrets on {dest_dep} "
+                   "you should build a new ami where you override "
+                   "configuration_secure.\n"
+                   "For example:")
+            msg = msg.format(
+                dest_env=dest_env,
+                dest_dep=dest_dep,
+                dest_play=dest_play,
+                source_env=source_env,
+                source_dep=source_dep,
+                dest_secure_ref=dest_versions.configuration_secure,
+            )
+            example_command = (
+                "/code cut ami for {dest_env}-{dest_dep}-{dest_play} "
+                "from {source_env}-{source_dep}-{source_play}")
+            if version_overrides:
+                example_command += (
+                    " with " + version_overrides +
+                    "configuration_secure=master")
+            else:
+                example_command += " with configuration_secure=master"
+            example_command = example_command.format(
+                dest_env=dest_env,
+                dest_dep=dest_dep,
+                dest_play=dest_play,
+                source_env=source_env,
+                source_dep=source_dep,
+                source_play=source_play,
+            )
+
+            self.say(msg, message, color='red')
+            self.say(example_command, message, color='red')
 
         self.notify_abbey(message, dest_env, dest_dep, dest_play,
                           final_versions, noop, dest_running_ami, verbose)
@@ -324,9 +370,6 @@ class ShowPlugin(WillPlugin):
 
             output = "Building ami for {}-{}-{}\n".format(env, dep, play)
             if verbose:
-                if ami_id:
-                    output += "With base ami: {}\n".format(ami_id)
-
                 display_params = dict(params)
                 display_params['vars'] = versions.play_versions
                 output += yaml.safe_dump(
