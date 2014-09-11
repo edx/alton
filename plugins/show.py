@@ -317,8 +317,8 @@ class ShowPlugin(WillPlugin):
                 source_play=source_play,
             )
 
-            self.say(msg, message, color='red')
-            self.say(example_command, message, color='red')
+            self.say(msg, message, color='yellow')
+            self.say(example_command, message, color='yellow')
 
         self.notify_abbey(message, dest_env, dest_dep, dest_play,
                           final_versions, noop, dest_running_ami, verbose)
