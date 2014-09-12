@@ -285,7 +285,7 @@ class ShowPlugin(WillPlugin):
             else:
                 repos_removed[repo_name] = self.hash_url_from(repo_data)
 
-        msgs= []
+        msgs = []
         for repo_name, url in diff_urls.items():
             msgs.append("{}: {}".format(repo_name, url))
 
