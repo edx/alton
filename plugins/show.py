@@ -80,7 +80,7 @@ class ShowPlugin(WillPlugin):
     def ami_for_edp(self, message, env, dep, play):
         ec2 = boto.connect_ec2(profile_name=dep)
         elb = boto.connect_elb(profile_name=dep)
-        elbs = elb.get_all_load_balancers()
+        all_elbs = elb.get_all_load_balancers()
 
         edp_filter = {
             "tag:environment": env,
@@ -91,7 +91,7 @@ class ShowPlugin(WillPlugin):
         amis = set()
         for reservation in reservations:
             for instance in reservation.instances:
-                elbs = self.instance_elbs(instance.id, dep, elbs)
+                elbs = self.instance_elbs(instance.id, dep, all_elbs)
                 if instance.state == 'running' and len(list(elbs)) > 0:
                     amis.add(instance.image_id)
 
@@ -99,6 +99,12 @@ class ShowPlugin(WillPlugin):
             msg = "Multiple AMIs found for {}-{}-{}, there should " \
                 "be only one. Please resolve any running deploys " \
                 "there before running this command."
+            msg = msg.format(env, dep, play)
+            self.say(msg, message, color='red')
+            return None
+
+        if len(amis) == 0:
+            msg = "No AMIs found for {}-{}-{}."
             msg = msg.format(env, dep, play)
             self.say(msg, message, color='red')
             return None
