@@ -11,7 +11,8 @@ from will.decorators import respond_to
 
 class Versions():
 
-    def __init__(self, configuration_ref, configuration_secure_ref, versions):
+    def __init__(self, configuration_ref, configuration_secure_ref, versions,
+                 repos=None):
         """
         configurations_ref: The gitref for configurations.
         configuration_secure_ref: The git ref for configuration_secure
@@ -20,6 +21,7 @@ class Versions():
         self.configuration = configuration_ref
         self.configuration_secure = configuration_secure_ref
         self.play_versions = versions
+        self.repos = repos
 
 
 class ShowPlugin(WillPlugin):
@@ -172,17 +174,23 @@ class ShowPlugin(WillPlugin):
         ami = ec2.get_all_images(ami_id)[0]
         configuration_ref = None
         configuration_secure_ref = None
+        repos = {}
         # Build the versions_dict to have all versions defined in the ami tags
         for tag, value in ami.tags.items():
             if tag.startswith('version:'):
                 key = tag[8:].strip()
-                shorthash = value.split()[1]
+                repo, shorthash = value.split()
+                repos[key] = {
+                    'url': repo,
+                    'shorthash': shorthash
+                }
+
                 if key == 'configuration':
                     configuration_ref = shorthash
                 elif key == 'configuration_secure':
                     configuration_secure_ref = shorthash
                 else:
-                    key = "{}_version".format(tag[8:])
+                    key = "{}_version".format(key)
                     # This is to deal with the fact that some
                     # versions are upper case and some are lower case.
                     versions_dict[key.lower()] = shorthash
@@ -190,7 +198,8 @@ class ShowPlugin(WillPlugin):
 
         return Versions(configuration_ref,
                         configuration_secure_ref,
-                        versions_dict
+                        versions_dict,
+                        repos,
                         )
 
     @respond_to("(?P<noop>noop )?cut ami for "  # Initial words
@@ -237,6 +246,94 @@ class ShowPlugin(WillPlugin):
         self.notify_abbey(
             message, env, dep, play, final_versions, noop, ami_id)
 
+    @respond_to("diff "
+                "(?P<first_env>\w*)-"  # First Environment
+                "(?P<first_dep>\w*)-"  # First Deployment
+                "(?P<first_play>\w*)"  # First Play(Cluster)
+                " "
+                "(?P<second_env>\w*)-"  # Second Environment
+                "(?P<second_dep>\w*)-"  # Second Deployment
+                "(?P<second_play>\w*)")  # Second Play(Cluster)
+    def diff_edps(self, message, first_env, first_dep, first_play,
+                  second_env, second_dep, second_play):
+        first_ami = self.ami_for_edp(
+            message, first_env, first_dep, first_play)
+        second_ami = self.ami_for_edp(
+            message, second_env, second_dep, second_play)
+
+        if first_ami is None or second_ami is None:
+            return
+
+        first_versions = self.get_ami_versions(first_dep, first_ami).repos
+        second_versions = self.get_ami_versions(second_dep, second_ami).repos
+
+        diff_urls = {}
+        repos_added = {}
+        repos_removed = {}
+        for repo_name, repo_data in first_versions.items():
+            if repo_name in second_versions:
+                diff_urls[repo_name] = \
+                    self.diff_url_from(repo_data, second_versions[repo_name])
+            else:
+                repos_added[repo_name] = self.hash_url_from(repo_data)
+
+        for repo_name, repo_data in second_versions.items():
+            if repo_name in first_versions:
+                if repo_name not in diff_urls:
+                    diff_urls[repo_name] = self.diff_url_from(
+                        first_versions[repo_name], repo_data)
+            else:
+                repos_removed[repo_name] = self.hash_url_from(repo_data)
+
+        msgs = []
+        for repo_name, url in diff_urls.items():
+            msgs.append("{}: {}".format(repo_name, url))
+
+        for repo_name, url in repos_added.items():
+            msgs.append("Added {}: {}".format(repo_name, url))
+
+        for repo_name, url in repos_removed.items():
+            msgs.append("Removed {}: {}".format(repo_name, url))
+
+        for line in msgs:
+            self.say(line, message)
+
+    def diff_url_from(self, first_data, second_data):
+        if first_data['url'] != second_data['url']:
+            msg = "clusters use different repos for this: {} vs {}".format(
+                self.hash_url_from(first_data),
+                self.hash_url_from(second_data))
+            return msg
+
+        if first_data['shorthash'] == second_data['shorthash']:
+            msg = "no difference"
+            return msg
+
+        url = "{}/compare/{}...{}".format(
+            self.web_url_from(first_data),
+            first_data['shorthash'],
+            second_data['shorthash']
+        )
+
+        return url
+
+    def hash_url_from(self, repo_data):
+        url = "{}/tree/{}".format(
+            self.web_url_from(repo_data),
+            repo_data['shorthash']
+        )
+        return url
+
+    def web_url_from(self, repo_data):
+        if repo_data['url'].startswith('git@'):
+            url = repo_data['url'].replace(':', '/')
+            url = url.replace('.git', '')
+            url = url.replace('git@', 'http://')
+
+            return url
+        else:
+            return repo_data['url']
+
     # A regex to build an AMI for one EDP from another EDP.
     @respond_to("(?P<verbose>verbose )?(?P<noop>noop )?cut ami for "  # Options
                 "(?P<dest_env>\w*)-"  # Destination Environment
@@ -245,7 +342,7 @@ class ShowPlugin(WillPlugin):
                 "from "
                 "(?P<source_env>\w*)-"  # Source Environment
                 "(?P<source_dep>\w*)-"  # Source Deployment
-                "(?P<source_play>\w*)"  # Destination Play(Cluster)
+                "(?P<source_play>\w*)"  # Source Play(Cluster)
                 "( with(?P<version_overrides>( \w*=\S*)*))?")  # Overrides
     def cut_from_edp(self, message, verbose, noop, dest_env, dest_dep,
                      dest_play, source_env, source_dep, source_play,
