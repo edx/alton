@@ -285,23 +285,28 @@ class ShowPlugin(WillPlugin):
             else:
                 repos_removed[repo_name] = self.hash_url_from(repo_data)
 
-        msg = ""
+        msgs= []
         for repo_name, url in diff_urls.items():
-            msg += "{}: {}\n".format(repo_name, url)
+            msgs.append("{}: {}".format(repo_name, url))
 
         for repo_name, url in repos_added.items():
-            msg += "Added {}: {}\n".format(repo_name, url)
+            msgs.append("Added {}: {}".format(repo_name, url))
 
         for repo_name, url in repos_removed.items():
-            msg += "Removed {}: {}\n".format(repo_name, url)
+            msgs.append("Removed {}: {}".format(repo_name, url))
 
-        self.say(msg, message)
+        for line in msgs:
+            self.say(line, message)
 
     def diff_url_from(self, first_data, second_data):
         if first_data['url'] != second_data['url']:
-            msg = "Clusters use different repos for this: {} vs {}".format(
+            msg = "clusters use different repos for this: {} vs {}".format(
                 self.hash_url_from(first_data),
                 self.hash_url_from(second_data))
+            return msg
+
+        if first_data['shorthash'] == second_data['shorthash']:
+            msg = "no difference"
             return msg
 
         url = "{}/compare/{}...{}".format(
