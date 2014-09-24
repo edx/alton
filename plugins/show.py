@@ -217,9 +217,9 @@ class ShowPlugin(WillPlugin):
         """cut ami for: create a new ami from the given parameters"""
 
         self.say("This version of the command is deprecated. Please use the "
-            "format 'cut ami for <e-d-c> from "
-            "<e-d-c> [using ami-???] [with [var=version]...]'",
-            message, color='yellow')
+                 "format 'cut ami for <e-d-c> from "
+                 "<e-d-c> [using ami-???] [with [var=version]...]'",
+                 message, color='yellow')
 
         versions_dict = {}
         configuration_ref = None
