@@ -215,6 +215,12 @@ class ShowPlugin(WillPlugin):
     def build_ami(self, message, env, dep, play, versions,
                   ami_id=None, noop=False):
         """cut ami for: create a new ami from the given parameters"""
+
+        self.say("This version of the command is deprecated. Please use the "
+            "format 'cut ami for <e-d-c> from "
+            "<e-d-c> [using ami-???] [with [var=version]...]'",
+            message, color='yellow')
+
         versions_dict = {}
         configuration_ref = None
         configuration_secure_ref = None
@@ -349,9 +355,10 @@ class ShowPlugin(WillPlugin):
                 "(?P<source_env>\w*)-"  # Source Environment
                 "(?P<source_dep>\w*)-"  # Source Deployment
                 "(?P<source_play>\w*)"  # Source Play(Cluster)
+                "( using (?P<base_ami>ami-\w*))?"
                 "( with(?P<version_overrides>( \w*=\S*)*))?")  # Overrides
     def cut_from_edp(self, message, verbose, noop, dest_env, dest_dep,
-                     dest_play, source_env, source_dep, source_play,
+                     dest_play, source_env, source_dep, source_play, base_ami,
                      version_overrides):
         # Get the active source AMI.
         self.say("Let me get what I need to build the ami...", message)
@@ -362,12 +369,17 @@ class ShowPlugin(WillPlugin):
         source_versions = self.get_ami_versions(
             source_dep, source_running_ami)
 
-        # Get the active destination AMI.  The one we're gonna
-        # use as a base for our build.
-        dest_running_ami = self.ami_for_edp(
-            message, dest_env, dest_dep, dest_play)
-        if dest_running_ami is None:
-            return
+        # Use the base ami if provided.
+        if base_ami is not None:
+            self.say("Using {} as base-ami.".format(base_ami), message)
+            dest_running_ami = base_ami
+        else:
+            # Get the active destination AMI.  The one we're gonna
+            # use as a base for our build.
+            dest_running_ami = self.ami_for_edp(
+                message, dest_env, dest_dep, dest_play)
+            if dest_running_ami is None:
+                return
 
         final_versions = self.update_from_versions_string(
             source_versions, version_overrides, message)
