@@ -103,7 +103,7 @@ class ShowPlugin(WillPlugin):
             configuration_secure_ref,
             versions_dict)
 
-        self.notify_abbey(
+        self._notify_abbey(
             message, env, dep, play, final_versions, noop, ami_id)
 
     @respond_to("^diff "
@@ -245,7 +245,7 @@ class ShowPlugin(WillPlugin):
             self.say(msg, message=message, color='yellow')
             self.say(example_command, message=message, color='yellow')
 
-        self.notify_abbey(message, dest_env, dest_dep, dest_play,
+        self._notify_abbey(message, dest_env, dest_dep, dest_play,
                           final_versions, noop, dest_running_ami, verbose)
 
     def _show_plays(self, message, env, dep):
