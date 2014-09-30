@@ -566,7 +566,7 @@ class ShowPlugin(WillPlugin):
         Looks for the given ami id accross all accounts
         Returns the AMI found
         """
-        print "looking up ami: {}".format(ami_id)
+        logging.info("looking up ami: {}".format(ami_id))
         found_amis = []
         for profile in self.aws_profiles:
             ec2 = boto.connect_ec2(profile_name=profile)
