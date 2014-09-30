@@ -146,9 +146,9 @@ class ShowPlugin(WillPlugin):
         self._diff_amis(first_ami, second_ami, message)
 
     @respond_to("^diff "
-                "(?P<first_ami>ami-\w*?)-"
+                "(?P<first_ami>ami-\w*)-"
                 " "
-                "(?P<second_ami>ami-\w*?)")
+                "(?P<second_ami>ami-\w*)")
     def diff_ami_ids(self, message, first_ami, second_ami):
         self._diff_amis(first_ami, second_ami, message)
 
