@@ -35,7 +35,10 @@ class ShowPlugin(WillPlugin):
     @respond_to("^show (?!ami-)"  # Negative lookahead to exclude ami strings
                 "(?P<env>\w*)(-(?P<dep>\w*))(-(?P<play>\w*))?")
     def show(self, message, env, dep, play):
-        """show <e-d-p>: show the instances in a VPC cluster"""
+        """
+        show [e-d-p]: show the instances in a VPC cluster
+        """
+
         if play is None:
             self._show_plays(message, env, dep)
         else:
@@ -49,7 +52,10 @@ class ShowPlugin(WillPlugin):
 
     @respond_to("^show (?P<ami_id>ami-\w*)")
     def show_ami(self, message, ami_id):
-        """show deployment <ami_id>: show tags for the ami"""
+        """
+        show deployment [ami_id]: show tags for the ami
+        """
+
         ami = self._get_ami(ami_id, message=message)
         if ami:
             self.say("/code {}".format(pformat(ami.tags)), message)
@@ -60,8 +66,7 @@ class ShowPlugin(WillPlugin):
                 "with(?P<versions>( \w*=\S*)*)")  # Override versions
     def build_ami(self, message, env, dep, play, versions,
                   ami_id=None, noop=False):
-        """cut ami for: create a new ami from the given parameters"""
-
+        # Docstring removed so this does not show up in the help
         self.say("This version of the command is deprecated. Please use the "
                  "format 'cut ami for <e-d-c> from "
                  "<e-d-c> [using ami-???] [with [var=version]...]'",
@@ -116,6 +121,9 @@ class ShowPlugin(WillPlugin):
                 "(?P<second_play>\w*)")  # Second Play(Cluster)
     def diff_edps(self, message, first_env, first_dep, first_play,
                   second_env, second_dep, second_play):
+        """
+        diff [e-d-p] [e-d-p] : Show the differences between two EDPs
+        """
         first_ami = self._ami_for_edp(
             message, first_env, first_dep, first_play)
         second_ami = self._ami_for_edp(
@@ -130,6 +138,9 @@ class ShowPlugin(WillPlugin):
                 " "
                 "(?P<second_ami>ami-\w*)")  # AMI
     def diff_edp_ami_id(self, message, first_env, first_dep, first_play, second_ami):
+        """
+        diff [ami-id] [e-d-p] : Show the differences between an EDP and an AMI
+        """
         first_ami = self._ami_for_edp(
             message, first_env, first_dep, first_play)
         self._diff_amis(first_ami, second_ami, message)
@@ -141,6 +152,9 @@ class ShowPlugin(WillPlugin):
                 "(?P<second_dep>\w*)-"  # Second Deployment
                 "(?P<second_play>\w*)")  # Second Play(Cluster)
     def diff_ami_id_edp(self, message, first_ami, second_env, second_dep, second_play):
+        """
+        diff [e-d-p] [ami-id] : Show the differences between an AMI and an EDP
+        """
         second_ami = self._ami_for_edp(
             message, second_env, second_dep, second_play)
         self._diff_amis(first_ami, second_ami, message)
@@ -154,22 +168,34 @@ class ShowPlugin(WillPlugin):
 
     # A regex to build an AMI for one EDP from another EDP.
     @respond_to("(?P<verbose>verbose )?(?P<noop>noop )?cut ami for "  # Options
-                "(?P<dest_env>\w*)-"  # Destination Environment
-                "(?P<dest_dep>\w*)-"  # Destination Deployment
-                "(?P<dest_play>\w*) "  # Destination Play(Cluster)
-                "from "
-                "(?P<source_env>\w*)-"  # Source Environment
-                "(?P<source_dep>\w*)-"  # Source Deployment
-                "(?P<source_play>\w*)"  # Source Play(Cluster)
+                "(?P<dest_env>\w*)-"            # Destination Environment
+                "(?P<dest_dep>\w*)-"            # Destination Deployment
+                "(?P<dest_play>\w*) "           # Destination Play(Cluster)
+                "(from )?"                      # from edp optional
+                "((?P<source_env>\w*)-"         # Source Environment
+                "(?P<source_dep>\w*)-"          # Source Deployment
+                "(?P<source_play>\w*))?"        # Source Play(Cluster)
                 "( using (?P<base_ami>ami-\w*))?"
                 "( with(?P<version_overrides>( \w*=\S*)*))?")  # Overrides
     def cut_from_edp(self, message, verbose, noop, dest_env, dest_dep,
                      dest_play, source_env, source_dep, source_play, base_ami,
                      version_overrides):
+        """
+        cut ami for [e-d-p] from [e-d-p] with [var1=version var2=version ...] : Build an AMI for one EDP using the versions from a different EDP with verions overrides
+        """
         # Get the active source AMI.
         self.say("Let me get what I need to build the ami...", message)
-        source_running_ami = self._ami_for_edp(
-            message, source_env, source_dep, source_play)
+
+        if not all([source_env, source_dep, source_play]):
+            # If the source is not specified use the destination
+            # edp with overrides
+            source_running_ami = self._ami_for_edp(
+                message, dest_env, dest_dep, dest_play)
+
+        else:
+            source_running_ami = self._ami_for_edp(
+                message, source_env, source_dep, source_play)
+
         if source_running_ami is None:
             return
 
