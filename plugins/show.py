@@ -476,6 +476,7 @@ class ShowPlugin(WillPlugin):
 
             return url
         else:
+            url = url.replace('.git', '')
             return repo_data['url']
 
     def _update_from_versions_string(self, defaults, versions_string, message):
