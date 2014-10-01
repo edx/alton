@@ -53,7 +53,7 @@ class ShowPlugin(WillPlugin):
     @respond_to("^show (?P<ami_id>ami-\w*)")
     def show_ami(self, message, ami_id):
         """
-        show deployment [ami_id]: show tags for the ami
+        show [ami_id]: show tags for the ami
         """
 
         ami = self._get_ami(ami_id, message=message)
