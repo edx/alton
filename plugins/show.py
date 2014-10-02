@@ -272,7 +272,7 @@ class ShowPlugin(WillPlugin):
             self.say(example_command, message=message, color='yellow')
 
         self._notify_abbey(message, dest_env, dest_dep, dest_play,
-                          final_versions, noop, dest_running_ami, verbose)
+                           final_versions, noop, dest_running_ami, verbose)
 
     def _show_plays(self, message, env, dep):
         logging.info("Getting all plays in {}-{}".format(env, dep))
@@ -469,15 +469,13 @@ class ShowPlugin(WillPlugin):
         return url
 
     def _web_url_from(self, repo_data):
-        if repo_data['url'].startswith('git@'):
-            url = repo_data['url'].replace(':', '/')
-            url = url.replace('.git', '')
-            url = url.replace('git@', 'http://')
-
-            return url
-        else:
-            url = url.replace('.git', '')
-            return repo_data['url']
+        url = repo_data['url']
+        # for both git and http links remove .git
+        # so that /compare links work
+        url = url.replace('.git', '')
+        if url.startswith('git@'):
+            url = url.replace(':', '/').replace('git@', 'http://')
+        return url
 
     def _update_from_versions_string(self, defaults, versions_string, message):
         """Update with any version overrides defined in the versions_string."""
