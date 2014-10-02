@@ -272,7 +272,7 @@ class ShowPlugin(WillPlugin):
             self.say(example_command, message=message, color='yellow')
 
         self._notify_abbey(message, dest_env, dest_dep, dest_play,
-                          final_versions, noop, dest_running_ami, verbose)
+                           final_versions, noop, dest_running_ami, verbose)
 
     def _show_plays(self, message, env, dep):
         logging.info("Getting all plays in {}-{}".format(env, dep))
@@ -545,8 +545,6 @@ class ShowPlugin(WillPlugin):
                              message, color='red')
 
     def _diff_amis(self, first_ami, second_ami, message):
-        print "first ->{}".format(first_ami)
-        print "second ->{}".format(second_ami)
 
         first_ami_versions = self._get_ami_versions(first_ami, message=message)
         second_ami_versions = self._get_ami_versions(second_ami, message=message)
