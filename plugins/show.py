@@ -371,8 +371,16 @@ class ShowPlugin(WillPlugin):
                     return None
                 for name, value in ami.tags.items():
                     if name.startswith('version:'):
-                        refs.append(
-                            "{}={}".format(name[8:], value.split()[1]))
+                        key = name[8:]
+                        if key == "configuration" or \
+                           key == "configuration_secure" or \
+                           key.endswith("_version") or \
+                           key.endswith("_VERSION"):
+                            refs.append(
+                                "{}={}".format(key, value.split()[1]))
+                        else:
+                            refs.append(
+                                "{}_version={}".format(key, value.split()[1]))
 
                 instance_name = lambda x: x.name
                 elbs = map(instance_name,
