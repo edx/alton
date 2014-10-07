@@ -29,7 +29,8 @@ class ShowPlugin(WillPlugin):
 
     def __init__(self):
         if not hasattr(settings, "WILL_BOTO_PROFILES"):
-            self._say_error("Error: WILL_BOTO_PROFILES not defined in the environment")
+            msg = "Error: WILL_BOTO_PROFILES not defined in the environment"
+            self._say_error(msg)
         self.aws_profiles = settings.WILL_BOTO_PROFILES.split(";")
 
     @respond_to("^show (?!ami-)"  # Negative lookahead to exclude ami strings
@@ -137,7 +138,8 @@ class ShowPlugin(WillPlugin):
                 "(?P<first_play>\w*)"  # First Play(Cluster)
                 " "
                 "(?P<second_ami>ami-\w*)")  # AMI
-    def diff_edp_ami_id(self, message, first_env, first_dep, first_play, second_ami):
+    def diff_edp_ami_id(self, message, first_env, first_dep, first_play,
+                        second_ami):
         """
         diff [ami-id] [e-d-p] : Show the differences between an EDP and an AMI
         """
@@ -151,7 +153,8 @@ class ShowPlugin(WillPlugin):
                 "(?P<second_env>\w*)-"  # Second Environment
                 "(?P<second_dep>\w*)-"  # Second Deployment
                 "(?P<second_play>\w*)")  # Second Play(Cluster)
-    def diff_ami_id_edp(self, message, first_ami, second_env, second_dep, second_play):
+    def diff_ami_id_edp(self, message, first_ami,
+                        second_env, second_dep, second_play):
         """
         diff [e-d-p] [ami-id] : Show the differences between an AMI and an EDP
         """
@@ -199,7 +202,8 @@ class ShowPlugin(WillPlugin):
         if source_running_ami is None:
             return
 
-        source_versions = self._get_ami_versions(source_running_ami, message=message)
+        source_versions = self._get_ami_versions(source_running_ami,
+                                                 message=message)
 
         if not source_versions:
             return
@@ -225,7 +229,8 @@ class ShowPlugin(WillPlugin):
            and (version_overrides is None
                 or "configuration_secure" not in version_overrides):
 
-            dest_versions = self._get_ami_versions(dest_running_ami, message=message)
+            dest_versions = self._get_ami_versions(dest_running_ami,
+                                                   message=message)
             if not dest_versions:
                 return
 
@@ -555,7 +560,8 @@ class ShowPlugin(WillPlugin):
     def _diff_amis(self, first_ami, second_ami, message):
 
         first_ami_versions = self._get_ami_versions(first_ami, message=message)
-        second_ami_versions = self._get_ami_versions(second_ami, message=message)
+        second_ami_versions = self._get_ami_versions(second_ami,
+                                                     message=message)
 
         if not first_ami_versions or not second_ami_versions:
             return None
@@ -610,7 +616,9 @@ class ShowPlugin(WillPlugin):
                 images = []
             found_amis.extend(images)
         if len(found_amis) != 1:
-            self._say_error("Error: {num_amis} AMI(s) returned for {ami_id}, for aws profiles {profiles}".format(
+            msg = ("Error: {num_amis} AMI(s) returned for {ami_id}, "
+                   "for aws profiles {profiles}")
+            self._say_error(msg.format(
                 num_amis=len(found_amis),
                 ami_id=ami_id,
                 profiles='/'.join(self.aws_profiles)), message=message)
