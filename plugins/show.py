@@ -28,10 +28,10 @@ class Versions():
 class ShowPlugin(WillPlugin):
 
     def __init__(self):
-        if not hasattr(settings, "WILL_BOTO_PROFILES"):
-            msg = "Error: WILL_BOTO_PROFILES not defined in the environment"
+        if not hasattr(settings, "BOTO_PROFILES"):
+            msg = "Error: BOTO_PROFILES not defined in the environment"
             self._say_error(msg)
-        self.aws_profiles = settings.WILL_BOTO_PROFILES.split(";")
+        self.aws_profiles = settings.BOTO_PROFILES.split(";")
 
     @respond_to("^show (?!ami-)"  # Negative lookahead to exclude ami strings
                 "(?P<env>\w*)(-(?P<dep>\w*))(-(?P<play>\w*))?")
