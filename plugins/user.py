@@ -1,8 +1,15 @@
 from will.plugin import WillPlugin
 from will.decorators import respond_to
+import pyotp
+import qrcode
+import boto
+import boto.s3.connection
+from boto.s3.key import Key
+import pprint
+import cStringIO
 
 class UserPlugin(WillPlugin):
-    def __check_user_permission(username, permission):
+    def check_user_permission(username, permission):
         user_permissions = self.load("user_permissions", {})
         try:
             if permission in user_permissions[username]:
@@ -11,6 +18,74 @@ class UserPlugin(WillPlugin):
                 return 0
         except KeyError:
             return 0
+
+    def generate_and_upload_QR(self,secret,username):
+        principle = 'devops@edx.org'
+        issuer = 'edx-ops'
+        url = 'otpauth://totp/{issuer}:{principle}?secret={secret}&issuer={issuer}'.format(issuer=issuer, principle=principle, secret=secret)
+        img = qrcode.make(url)
+        conn = boto.connect_s3(profile_name='edx')
+        bucket = conn.get_bucket('edx-twofactor')
+        key = Key(bucket)
+        key.key = '{}-qr.png'.format(username)
+        image_buffer = cStringIO.StringIO()
+        img.save(image_buffer, 'PNG')
+        key.set_contents_from_string(image_buffer.getvalue())
+        url = key.generate_url(60,query_auth=True, force_http=True)
+        return url
+
+    @respond_to("^twofactor verify (?P<secret>\w*)")
+    def verify_twofactor(self, message, secret):
+        user_twofactor = self.load("user_twofactor", {})
+        username = message.sender.nick
+        if username in user_twofactor:
+            totp = pyotp.TOTP(user_twofactor[username])
+            if totp.verify(secret):
+                self.reply(message, "You are authenticated, {}".format(username)) 
+            else:
+                self.reply(message, "That's not correct,{}".format(username))
+
+        else:
+            self.reply(message, "twofactor auth not set up for {}".format(username)) 
+
+
+
+
+        
+
+
+    @respond_to("^debug messageobject")
+    def debug_messageobject(self, message):
+        pp = pprint.PrettyPrinter(indent=4)
+        message['type'] = 'chat'
+        self.reply(message, pp.pformat(message))
+
+    @respond_to("^twofactor me")
+    def create_user_twofactor(self, message):
+        username = message.sender.nick
+        user_twofactor = self.load("user_twofactor", {})
+        if username not in user_twofactor:
+            user_twofactor[username] = pyotp.random_base32()
+            message['type'] = 'chat'
+            #self.reply(message, "twofactor is: {}".format(user_twofactor[username])) 
+            self.reply(message, self.generate_and_upload_QR(user_twofactor[username], username))
+            self.save("user_twofactor", user_twofactor)
+        else:
+            message['type'] = 'chat'
+            self.reply(message, "twofactor is already set up!") 
+
+    @respond_to("^twofactor remove (?P<username>\w*)")
+    def remove_user_twofactor(self, message, username):
+        user_twofactor = self.load("user_twofactor", {})
+        if username in user_twofactor:
+            del user_twofactor[username]
+            self.reply(message, "twofactor is removed for {}".format(username)) 
+            self.save("user_twofactor", user_twofactor)
+        else:
+            self.reply(message, "twofactor was not set for {}".format(username)) 
+
+
+
 
     @respond_to("^what can (?P<username>\w*) do")
     def show_user_permission(self, message, username):
