@@ -9,14 +9,15 @@ import pprint
 import cStringIO
 
 class UserPlugin(WillPlugin):
-    def check_user_permission(username, permission):
+    def check_user_permission(self, username, permission):
         user_permissions = self.load("user_permissions", {})
-        try:
+
+        if username in user_permissions:
             if permission in user_permissions[username]:
                 return 1
             else:
                 return 0
-        except KeyError:
+        else:
             return 0
 
     def generate_and_upload_QR(self,secret,username):
@@ -49,11 +50,6 @@ class UserPlugin(WillPlugin):
             self.reply(message, "twofactor auth not set up for {}".format(username)) 
 
 
-
-
-        
-
-
     @respond_to("^debug messageobject")
     def debug_messageobject(self, message):
         pp = pprint.PrettyPrinter(indent=4)
@@ -83,8 +79,6 @@ class UserPlugin(WillPlugin):
             self.save("user_twofactor", user_twofactor)
         else:
             self.reply(message, "twofactor was not set for {}".format(username)) 
-
-
 
 
     @respond_to("^what can (?P<username>\w*) do")
@@ -126,20 +120,24 @@ class UserPlugin(WillPlugin):
 
     @respond_to("^give (?P<username>\w*) permission(?P<permissions>( \w*)*)")
     def give_user_permission(self, message, username, permissions):
-        requested_permissions = permissions.split()
-        try:
-            requested_permissions.remove("to")
-        except ValueError:
-            pass
-        #self.say("adding permissions : {} ".format(', '.join(requested_permissions)), message=message) 
-        try:
-            user_permissions = self.load("user_permissions", {})
-            new_permissions = list(set(requested_permissions + user_permissions[username]))
-        except KeyError:
-            new_permissions = requested_permissions
-        user_permissions[username] = new_permissions
-        self.save("user_permissions", user_permissions)
-        self.say("@{}: new permissions for {} are: {} ".format(message.sender.nick, username, ', '.join(new_permissions)), message=message) 
+        if self.check_user_permission(message.sender.nick, 'grant'):  
+            requested_permissions = permissions.split()
+            try:
+                requested_permissions.remove("to")
+            except ValueError:
+                pass
+            #self.say("adding permissions : {} ".format(', '.join(requested_permissions)), message=message) 
+            try:
+                user_permissions = self.load("user_permissions", {})
+                new_permissions = list(set(requested_permissions + user_permissions[username]))
+            except KeyError:
+                new_permissions = requested_permissions
+            user_permissions[username] = new_permissions
+            self.save("user_permissions", user_permissions)
+            self.say("@{}: new permissions for {} are: {} ".format(message.sender.nick, username, ', '.join(new_permissions)), message=message) 
+        else:
+            self.say("@{}: you don't have grant permission".format(message.sender.nick), message=message) 
+
 
     @respond_to("^take away from (?P<username>\w*) permission(?P<permissions>( \w*)*)")
     def remove_user_permission(self, message, username, permissions):
