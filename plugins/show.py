@@ -12,6 +12,40 @@ from will.plugin import WillPlugin
 from will.decorators import respond_to
 from boto.exception import EC2ResponseError
 
+class MultipleImagesException(Exception):
+    pass
+
+def get_ami(ami_id, aws_profiles):
+    """
+    Looks for the given ami id accross all accounts
+    Returns the AMI found
+    """
+    if not hasattr(settings, "BOTO_PROFILES"):
+        msg = "Error: BOTO_PROFILES not defined in the environment"
+        self._say_error(msg)
+    aws_profiles = settings.BOTO_PROFILES.split(';')
+
+    logging.info("looking up ami: {}".format(ami_id))
+    found_amis = []
+    for profile in aws_profiles:
+        ec2 = boto.connect_ec2(profile_name=profile)
+        try:
+            images = ec2.get_all_images(ami_id)
+        except EC2ResponseError:
+            # failures expected for other accounts
+            images = []
+        found_amis.extend(images)
+    if len(found_amis) != 1:
+        msg = ("Error: {num_amis} AMI(s) returned for {ami_id}, "
+               "for aws profiles {profiles}")
+        msg = msg.format(
+            num_amis=len(found_amis),
+            ami_id=ami_id,
+            profiles='/'.join(aws_profiles)), message=message)
+        raise MultipleImagesException(msg)
+
+    return found_amis[0]
+
 
 class Versions():
 
@@ -611,29 +645,15 @@ class ShowPlugin(WillPlugin):
             self.say(line, message)
 
     def _get_ami(self, ami_id, message=None):
-        """
-        Looks for the given ami id accross all accounts
-        Returns the AMI found
-        """
-        logging.info("looking up ami: {}".format(ami_id))
-        found_amis = []
-        for profile in self.aws_profiles:
-            ec2 = boto.connect_ec2(profile_name=profile)
-            try:
-                images = ec2.get_all_images(ami_id)
-            except EC2ResponseError:
-                # failures expected for other accounts
-                images = []
-            found_amis.extend(images)
-        if len(found_amis) != 1:
-            msg = ("Error: {num_amis} AMI(s) returned for {ami_id}, "
-                   "for aws profiles {profiles}")
-            self._say_error(msg.format(
-                num_amis=len(found_amis),
-                ami_id=ami_id,
-                profiles='/'.join(self.aws_profiles)), message=message)
+        ami = None
+        try:
+            ami = get_ami(ami_id, aws_profiles)
+        except MultipleImagesException as e:
+            self._say_error(e.message)
             return None
-        return found_amis[0]
+
+        return ami
+
 
     def _say_error(self, msg, message=None):
         """
