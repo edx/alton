@@ -41,7 +41,7 @@ def get_ami(ami_id, aws_profiles):
         msg = msg.format(
             num_amis=len(found_amis),
             ami_id=ami_id,
-            profiles='/'.join(aws_profiles)), message=message)
+            profiles='/'.join(aws_profiles))
         raise MultipleImagesException(msg)
 
     return found_amis[0]
@@ -649,7 +649,7 @@ class ShowPlugin(WillPlugin):
         try:
             ami = get_ami(ami_id, aws_profiles)
         except MultipleImagesException as e:
-            self._say_error(e.message)
+            self._say_error(e.message, message=message)
             return None
 
         return ami
