@@ -19,11 +19,11 @@ def check_user_permission(storage, username, permission):
     else:
         return 0
 
-def verify_twofactor(storage, username, secret):
+def verify_twofactor(storage, username, token):
     user_twofactor = storage.load("user_twofactor", {})
     if username in user_twofactor:
         totp = pyotp.TOTP(user_twofactor[username])
-        if totp.verify(secret):
+        if totp.verify(token):
             return 1
         else:
             return 0
@@ -32,12 +32,18 @@ def verify_twofactor(storage, username, secret):
 
 class UserPlugin(WillPlugin):
     def generate_and_upload_QR(self,secret,username):
-        principle = 'devops@edx.org'
-        issuer = 'edx-ops'
+        try:
+            principle = settings.TWOFACTOR_PRINCIPLE
+            issuer = settings.TWOFACTOR_ISSUER
+            s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
+            s3_twofactor_profile = settings.TWOFACTOR_S3_PROFILE
+        except:
+            return "Settings for S3 hosted QR codes not configured properly in environment"
+
         url = 'otpauth://totp/{issuer}:{principle}?secret={secret}&issuer={issuer}'.format(issuer=issuer, principle=principle, secret=secret)
         img = qrcode.make(url)
-        conn = boto.connect_s3(profile_name='edx')
-        bucket = conn.get_bucket('edx-twofactor')
+        conn = boto.connect_s3(profile_name=s3_twofactor_profile)
+        bucket = conn.get_bucket(s3_twofactor_bucket)
         key = Key(bucket)
         key.key = '{}-qr.png'.format(username)
         image_buffer = cStringIO.StringIO()
@@ -46,13 +52,13 @@ class UserPlugin(WillPlugin):
         url = key.generate_url(60,query_auth=True, force_http=True)
         return url
 
-    @respond_to("^twofactor verify (?P<secret>\w*)")
-    def verify_user_twofactor(self, message, secret):
+    @respond_to("^twofactor verify (?P<token>\w*)")
+    def verify_user_twofactor(self, message, token):
         """
-        twofactor verify [secret]: verify your twofactor authentication system
+        twofactor verify [token]: verify your twofactor authentication system
         """
         username = message.sender.nick
-        if verify_twofactor(self,username, secret):
+        if verify_twofactor(self,username, token):
             self.reply(message, "You are authenticated, {}".format(username)) 
         else:
             self.reply(message, "That's not correct,{}".format(username))
@@ -70,7 +76,7 @@ class UserPlugin(WillPlugin):
             message['type'] = 'chat'
             self.reply(message, self.generate_and_upload_QR(user_twofactor[username], username))
             self.save("user_twofactor", user_twofactor)
-            self.reply(message, "say 'twofactor verify <secret key>' to check your twofactor verification")
+            self.reply(message, "say 'twofactor verify <token>' to check your twofactor verification")
         else:
             message['type'] = 'chat'
             self.reply(message, "twofactor is already set up!") 
