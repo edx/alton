@@ -62,7 +62,7 @@ class UserPlugin(WillPlugin):
             
 
 
-    def generate_and_upload_QR(self,secret,username):
+    def generate_and_upload_QR(self, secret, username):
         try:
             principle = self.TWOFACTOR_PRINCIPLE
             issuer = self.TWOFACTOR_ISSUER
@@ -83,7 +83,7 @@ class UserPlugin(WillPlugin):
         url = key.generate_url(60,query_auth=True, force_http=True)
         return url
 
-    @respond_to("^twofactor verify (?P<token>\w*)")
+    @respond_to("^twofactor verify (?P<token>\w+)")
     def verify_user_twofactor(self, message, token):
         """
         twofactor verify [token]: verify your twofactor authentication system
@@ -112,7 +112,7 @@ class UserPlugin(WillPlugin):
             message['type'] = 'chat'
             self.reply(message, "twofactor is already set up!") 
 
-    @respond_to("^twofactor remove (?P<username>\w*)")
+    @respond_to("^twofactor remove (?P<username>\w+)")
     def remove_user_twofactor(self, message, username):
         """
         twofactor remove [username]: remove [username]'s twofactor authentication (requires 'admin' permission)
@@ -128,7 +128,7 @@ class UserPlugin(WillPlugin):
         else:
             self.say("@{}: you don't have admin permission".format(message.sender.nick), message=message) 
 
-    @respond_to("^what can (?P<username>\w*) do")
+    @respond_to("^what can (?P<username>\w+) do")
     def show_user_permission(self, message, username):
         """
         what can [username] do?: get someone's permissions
@@ -142,7 +142,7 @@ class UserPlugin(WillPlugin):
             self.say("@{}: I don't know who {} is. (no permissions)".format(message.sender.nick, username), message=message)
 
 
-    @respond_to("^who can(?P<permissions>( \w*)*)")
+    @respond_to("^who can(?P<permissions>( \w+)+)")
     def find_user_permission(self, message, permissions):
         """
         who can [permission]?: find the list of people with a permission
@@ -157,7 +157,7 @@ class UserPlugin(WillPlugin):
                     pass
             self.say("@{}: {} can {}".format(message.sender.nick, ', '.join(userlist), permission), message=message)
 
-    @respond_to("^can I(?P<permissions>( \w*)*)")
+    @respond_to("^can I(?P<permissions>( \w+)+)")
     def confirm_user_permission(self, message, permissions):
         """
         can I [permission]?: check if you have a specific permission
@@ -170,7 +170,7 @@ class UserPlugin(WillPlugin):
 
 
 
-    @respond_to("^give (?P<username>\w*) permission(?P<permissions>( \w*)*)")
+    @respond_to("^give (?P<username>\w+) permission(?P<permissions>( \w+)+)")
     def give_user_permission(self, message, username, permissions):
         """
         give [username] permission to [permission]: grant a user a permission (requires 'grant' permission)
@@ -193,7 +193,7 @@ class UserPlugin(WillPlugin):
             self.say("@{}: you don't have grant permission".format(message.sender.nick), message=message) 
 
 
-    @respond_to("^take away from (?P<username>\w*) permission(?P<permissions>( \w*)*)")
+    @respond_to("^take away from (?P<username>\w+) permission(?P<permissions>( \w+)+)")
     def remove_user_permission(self, message, username, permissions):
         """
         take away from [username] permission [permission]: remove someone's permission (requires grant permission)
