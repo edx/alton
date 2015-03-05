@@ -11,7 +11,15 @@ import cStringIO
 
 def check_user_permission(storage, username, permission):
     user_permissions = storage.load("user_permissions", {})
-
+    if len(user_permissions) == 0:
+        if hasattr(settings, "ADMIN_USERS"):
+            for admin_user in settings.ADMIN_USERS.split(','):
+                user_permissions[admin_user] = ['admin', 'grant']
+                storage.say("giving {} admin permissions".format(admin_user))
+            storage.save("user_permissions", user_permissions)
+        else:
+            msg = "No admin users are defined in redis or environment"
+            storage.say(msg)
     if username in user_permissions:
         if permission in user_permissions[username]:
             return 1
@@ -35,20 +43,23 @@ class UserPlugin(WillPlugin):
     def __init__(self):
         if not hasattr(settings, "TWOFACTOR_ISSUER"):
             msg = "Error: TWOFACTOR_ISSUER not defined in the environment"
-            self._say_error(msg)
+            self.say(msg)
         self.TWOFACTOR_ISSUER = settings.TWOFACTOR_ISSUER
         if not hasattr(settings, "TWOFACTOR_PRINCIPLE"):
             msg = "Error: TWOFACTOR_PRINCIPLE not defined in the environment"
-            self._say_error(msg)
+            self.say(msg)
         self.TWOFACTOR_PRINCIPLE = settings.TWOFACTOR_PRINCIPLE
         if not hasattr(settings, "TWOFACTOR_S3_BUCKET"):
             msg = "Error: TWOFACTOR_S3_BUCKET not defined in the environment"
-            self._say_error(msg)
+            self.say(msg)
         self.TWOFACTOR_S3_BUCKET = settings.TWOFACTOR_S3_BUCKET
         if not hasattr(settings, "TWOFACTOR_S3_PROFILE"):
             msg = "Error: TWOFACTOR_S3_PROFILE not defined in the environment"
             self._say_error(msg)
         self.TWOFACTOR_S3_PROFILE = settings.TWOFACTOR_S3_PROFILE
+
+
+            
 
 
     def generate_and_upload_QR(self,secret,username):
@@ -170,7 +181,6 @@ class UserPlugin(WillPlugin):
                 requested_permissions.remove("to")
             except ValueError:
                 pass
-            #self.say("adding permissions : {} ".format(', '.join(requested_permissions)), message=message) 
             try:
                 user_permissions = self.load("user_permissions", {})
                 new_permissions = list(set(requested_permissions + user_permissions[username]))
