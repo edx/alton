@@ -1,5 +1,6 @@
 from will.plugin import WillPlugin
 from will.decorators import respond_to
+from will import settings
 import pyotp
 import qrcode
 import boto
@@ -31,12 +32,31 @@ def verify_twofactor(storage, username, token):
         return 0
 
 class UserPlugin(WillPlugin):
+    def __init__(self):
+        if not hasattr(settings, "TWOFACTOR_ISSUER"):
+            msg = "Error: TWOFACTOR_ISSUER not defined in the environment"
+            self._say_error(msg)
+        self.TWOFACTOR_ISSUER = settings.TWOFACTOR_ISSUER
+        if not hasattr(settings, "TWOFACTOR_PRINCIPLE"):
+            msg = "Error: TWOFACTOR_PRINCIPLE not defined in the environment"
+            self._say_error(msg)
+        self.TWOFACTOR_PRINCIPLE = settings.TWOFACTOR_PRINCIPLE
+        if not hasattr(settings, "TWOFACTOR_S3_BUCKET"):
+            msg = "Error: TWOFACTOR_S3_BUCKET not defined in the environment"
+            self._say_error(msg)
+        self.TWOFACTOR_S3_BUCKET = settings.TWOFACTOR_S3_BUCKET
+        if not hasattr(settings, "TWOFACTOR_S3_PROFILE"):
+            msg = "Error: TWOFACTOR_S3_PROFILE not defined in the environment"
+            self._say_error(msg)
+        self.TWOFACTOR_S3_PROFILE = settings.TWOFACTOR_S3_PROFILE
+
+
     def generate_and_upload_QR(self,secret,username):
         try:
-            principle = settings.TWOFACTOR_PRINCIPLE
-            issuer = settings.TWOFACTOR_ISSUER
-            s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
-            s3_twofactor_profile = settings.TWOFACTOR_S3_PROFILE
+            principle = self.TWOFACTOR_PRINCIPLE
+            issuer = self.TWOFACTOR_ISSUER
+            s3_twofactor_bucket = self.TWOFACTOR_S3_BUCKET
+            s3_twofactor_profile = self.TWOFACTOR_S3_PROFILE
         except:
             return "Settings for S3 hosted QR codes not configured properly in environment"
 
@@ -132,7 +152,7 @@ class UserPlugin(WillPlugin):
         can I [permission]?: check if you have a specific permission
         """
         for permission in permissions.split():
-            if check_user_permission(self, message.sender.nick, 'grant'):  
+            if check_user_permission(self, message.sender.nick, permission):  
                 self.say("@{}: Yes, you can {}".format(message.sender.nick, permission), message=message)
             else:
                 self.say("@{}: No, you can't {}".format(message.sender.nick, permission), message=message)
