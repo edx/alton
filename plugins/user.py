@@ -92,7 +92,7 @@ class UserPlugin(WillPlugin):
         if verify_twofactor(self,username, token):
             self.reply(message, "You are authenticated, {}".format(username)) 
         else:
-            self.reply(message, "That's not correct,{}".format(username))
+            self.reply(message, "That's not correct, {}".format(username))
 
 
     @respond_to("^twofactor me")
