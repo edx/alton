@@ -204,7 +204,6 @@ class UserPlugin(WillPlugin):
                 requested_permissions.remove("to")
             except ValueError:
                 pass
-            #self.say("removing permissions : {} ".format(', '.join(requested_permissions)), message=message) 
             try:
                 user_permissions = self.load("user_permissions", {})
                 for permission in requested_permissions:
