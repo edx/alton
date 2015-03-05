@@ -1,4 +1,6 @@
 *.py[cod]
 pip-log.txt
 shelf.db
-    
+*.swp
+start_alton.sh
+ENV
