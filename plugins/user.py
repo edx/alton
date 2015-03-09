@@ -10,8 +10,11 @@ import pprint
 import cStringIO
 
 def check_user_permission(storage, username, permission):
+    """
+    Function to check User permissions.  Requires an instance of WillPlugin to be passed in as 'storage'
+    """
     user_permissions = storage.load("user_permissions", {})
-    if len(user_permissions) == 0:
+    if not user_permissions:
         if hasattr(settings, "ADMIN_USERS"):
             for admin_user in settings.ADMIN_USERS.split(','):
                 user_permissions[admin_user] = ['admin', 'grant']
@@ -29,13 +32,13 @@ def check_user_permission(storage, username, permission):
         return 0
 
 def verify_twofactor(storage, username, token):
+    """
+    Function to check User's twofactor token.  Requires an instance of WillPlugin to be passed in as 'storage'
+    """
     user_twofactor = storage.load("user_twofactor", {})
     if username in user_twofactor:
         totp = pyotp.TOTP(user_twofactor[username])
-        if totp.verify(token):
-            return 1
-        else:
-            return 0
+        return totp.verify(token)
     else:
         return 0
 
@@ -44,19 +47,15 @@ class UserPlugin(WillPlugin):
         if not hasattr(settings, "TWOFACTOR_ISSUER"):
             msg = "Error: TWOFACTOR_ISSUER not defined in the environment"
             self.say(msg)
-        self.TWOFACTOR_ISSUER = settings.TWOFACTOR_ISSUER
         if not hasattr(settings, "TWOFACTOR_PRINCIPLE"):
             msg = "Error: TWOFACTOR_PRINCIPLE not defined in the environment"
             self.say(msg)
-        self.TWOFACTOR_PRINCIPLE = settings.TWOFACTOR_PRINCIPLE
         if not hasattr(settings, "TWOFACTOR_S3_BUCKET"):
             msg = "Error: TWOFACTOR_S3_BUCKET not defined in the environment"
             self.say(msg)
-        self.TWOFACTOR_S3_BUCKET = settings.TWOFACTOR_S3_BUCKET
         if not hasattr(settings, "TWOFACTOR_S3_PROFILE"):
             msg = "Error: TWOFACTOR_S3_PROFILE not defined in the environment"
             self._say_error(msg)
-        self.TWOFACTOR_S3_PROFILE = settings.TWOFACTOR_S3_PROFILE
 
 
             
@@ -64,10 +63,10 @@ class UserPlugin(WillPlugin):
 
     def generate_and_upload_QR(self, secret, username):
         try:
-            principle = self.TWOFACTOR_PRINCIPLE
-            issuer = self.TWOFACTOR_ISSUER
-            s3_twofactor_bucket = self.TWOFACTOR_S3_BUCKET
-            s3_twofactor_profile = self.TWOFACTOR_S3_PROFILE
+            principle = settings.TWOFACTOR_PRINCIPLE
+            issuer = settings.TWOFACTOR_ISSUER
+            s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
+            s3_twofactor_profile = settings.TWOFACTOR_S3_PROFILE
         except:
             return "Settings for S3 hosted QR codes not configured properly in environment"
 
@@ -133,7 +132,7 @@ class UserPlugin(WillPlugin):
         """
         what can [username] do?: get someone's permissions
         """
-        if 'I' == username:
+        if 'i' == username.lower():
             username = message.sender.nick
         user_permissions = self.load("user_permissions", {})
         try:
@@ -148,14 +147,10 @@ class UserPlugin(WillPlugin):
         who can [permission]?: find the list of people with a permission
         """
         user_permissions = self.load("user_permissions", {})
-        for permission in permissions.split():
-            userlist = []
-            for user in user_permissions:
-                if permission in user_permissions[user]:
-                    userlist.append(user)
-                else:
-                    pass
-            self.say("@{}: {} can {}".format(message.sender.nick, ', '.join(userlist), permission), message=message)
+        userlist = [user for user, user_perm in user_permissions.items() 
+                for permission in permissions.split() 
+                    if permission in user_perm]
+        self.say("@{}: {} can {}".format(message.sender.nick, ', '.join(userlist), permission), message=message)
 
     @respond_to("^can I(?P<permissions>( \w+)+)")
     def confirm_user_permission(self, message, permissions):
