@@ -1,0 +1,28 @@
+alton:
+  build: .
+  environment:
+    - WILL_USERNAME
+    - WILL_PASSWORD
+    - WILL_V1_TOKEN
+    - WILL_V2_TOKEN
+    - WILL_ROOMS
+    - WILL_NAME
+    - WILL_HANDLE
+    - WILL_REDIS_URL
+    - WILL_HTTPSERVER_PORT
+    - WILL_WORLD_WEATHER_ONLINE_KEY
+    - WILL_TWOFACTOR_ISSUER
+    - WILL_TWOFACTOR_S3_BUCKET
+    - WILL_TWOFACTOR_S3_PROFILE
+    - WILL_TWOFACTOR_SECRET
+    - WILL_TWOFACTOR_SESSION_DURATION
+    - WILL_BOTO_PROFILES
+    - WILL_ADMIN_USERS
+  links:
+    - redis
+  volumes:
+    - ~/.boto:/etc/boto.cfg:ro
+redis:
+  image: redis
+  ports:
+    - "127.0.0.1:6379:6379"

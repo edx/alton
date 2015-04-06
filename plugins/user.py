@@ -1,215 +1,454 @@
 from will.plugin import WillPlugin
-from will.decorators import respond_to
+from will.decorators import respond_to, require_settings
 from will import settings
 import pyotp
 import qrcode
+import base64
 import boto
 import boto.s3.connection
 from boto.s3.key import Key
-import pprint
 import cStringIO
+import datetime
+import urlparse
+from simplecrypt import encrypt, decrypt
+import pytz
 
-def check_user_permission(storage, username, permission):
-    """
-    Function to check User permissions.  Requires an instance of WillPlugin to be passed in as 'storage'
-    """
-    user_permissions = storage.load("user_permissions", {})
-    if not user_permissions:
-        if hasattr(settings, "ADMIN_USERS"):
-            for admin_user in settings.ADMIN_USERS.split(','):
-                user_permissions[admin_user] = ['admin', 'grant']
-                storage.say("giving {} admin permissions".format(admin_user))
-            storage.save("user_permissions", user_permissions)
-        else:
-            msg = "No admin users are defined in redis or environment"
-            storage.say(msg)
-    if username in user_permissions:
-        if permission in user_permissions[username]:
-            return 1
-        else:
-            return 0
-    else:
-        return 0
+import logging
+log = logging.getLogger(__name__)
 
-def verify_twofactor(storage, username, token):
+
+# TODO: QR code over hipchat leaves the account vulnerable if the client renders the image and leaves it rendered in the chat history
+# TODO: Maybe vulnerable to brute force attacks, is there any rate limiting from client -> hipchat? or hipchat -> bot?
+# TODO: Create a "twofactor:permission:<user_id>" key whose value is a set in redis so that we can use SADD and other set operations to manage permission grant/revoke
+# TODO: Tell users that you are responding in private chat when they try to run these commands from a room
+
+
+def requires_permission(permission):
     """
-    Function to check User's twofactor token.  Requires an instance of WillPlugin to be passed in as 'storage'
+    A decorator that ensures the user sending the message is authenticated and authorized to perform the action.
+
+    Example:
+
+        @respond_to(r'^hi')
+        @requires_permission('greet_users')
+        def say_hello(self, message):
+            self.reply(message, "Hello!")
     """
-    user_twofactor = storage.load("user_twofactor", {})
-    if username in user_twofactor:
-        totp = pyotp.TOTP(user_twofactor[username])
-        return totp.verify(token)
+    def decorator_check_permission(func):
+        def process_response(plugin, message, *args, **kwargs):
+            if check_permission(plugin, message, permission):
+                return func(plugin, message, *args, **kwargs)
+
+        return process_response
+
+    return decorator_check_permission
+
+
+def check_permission(plugin, message, permission):
+    """
+    Ensure the user sending the message is authenticated and authorized to perform the action.
+
+    This can be used to check permissions that are scoped to a particular entity. For example you might grant a
+    permission like "deploy:staging" which allows users to deploy to the staging environment.
+
+    Example:
+
+        @respond_to('^deploy to (?P<environment>\w+)')
+        def deploy(self, message, environment):
+            if not check_permission(self, message, 'deploy:' + environment):
+                self.reply(message, 'Sorry, you are not allowed to deploy to "{}"'.format(environment))
+                return
+            else:
+                real_deploy(environment)
+    """
+    requestor = User.get_from_message(plugin, message)
+    if not requestor:
+        return False
+
+    if not requestor.is_authenticated:
+        plugin.direct_reply(message, "You are not authenticated, please verify your identity by saying 'twofactor verify [token]' and try again")
+        return False
+
+    if not requestor.has_permission(permission):
+        plugin.direct_reply(message, "You are not authorized to perform this action")
+        return False
     else:
-        return 0
+        return True
+
 
 class UserPlugin(WillPlugin):
-    def __init__(self):
-        if not hasattr(settings, "TWOFACTOR_ISSUER"):
-            msg = "Error: TWOFACTOR_ISSUER not defined in the environment"
-            self.say(msg)
-        if not hasattr(settings, "TWOFACTOR_PRINCIPLE"):
-            msg = "Error: TWOFACTOR_PRINCIPLE not defined in the environment"
-            self.say(msg)
-        if not hasattr(settings, "TWOFACTOR_S3_BUCKET"):
-            msg = "Error: TWOFACTOR_S3_BUCKET not defined in the environment"
-            self.say(msg)
-        if not hasattr(settings, "TWOFACTOR_S3_PROFILE"):
-            msg = "Error: TWOFACTOR_S3_PROFILE not defined in the environment"
-            self._say_error(msg)
+    """
+    Manage users, authentication and authorization.
 
+    The single layer of password security for hipchat is not sufficient by our estimation for some of the tasks we want
+    to automate. In order to ensure that users are actually who they claim they are, we implemented an additional layer
+    of security in the form of a time sensitive token that is generated by an external device. Google Authenticator is
+    the recommended smartphone app which is capable of generating these tokens.
 
-            
+    Once a user is authenticated, they have a finite amount of time to execute privileged actions. Once that time limit
+    is exceeded, they will have to re-authenticate. Similar to the "sudo" command in *nix. Thus, if a user's laptop is
+    stolen, the attacker would have a very small window in which they could execute privileged commands even if the
+    computer is still logged into hipchat.
 
+    The settings used to configure this plugin are (can be placed in config.py):
 
-    def generate_and_upload_QR(self, secret, username):
-        try:
-            principle = settings.TWOFACTOR_PRINCIPLE
-            issuer = settings.TWOFACTOR_ISSUER
-            s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
-            s3_twofactor_profile = settings.TWOFACTOR_S3_PROFILE
-        except:
-            return "Settings for S3 hosted QR codes not configured properly in environment"
+    TWOFACTOR_ISSUER: This is the name of the bot (typically). It will appear above the user's name in the app that
+        generates the rotating keys to identify the code. Many of the apps will generate keys for several providers, so
+        this string should uniquely identify your bot.
+    TWOFACTOR_S3_PROFILE: The boto profile to use to connect to S3. The machine that is running the bot is expected to
+        have a boto configuration file present that contains the various credentials needed to connect to AWS to perform
+        various actions. The credentials referenced by this profile must be able to be used to upload new keys to the S3
+        bucket specified by TWOFACTOR_S3_BUCKET and generate URLs for those objects.
 
-        url = 'otpauth://totp/{issuer}:{principle}?secret={secret}&issuer={issuer}'.format(issuer=issuer, principle=principle, secret=secret)
-        img = qrcode.make(url)
-        conn = boto.connect_s3(profile_name=s3_twofactor_profile)
-        bucket = conn.get_bucket(s3_twofactor_bucket)
-        key = Key(bucket)
-        key.key = '{}-qr.png'.format(username)
-        image_buffer = cStringIO.StringIO()
-        img.save(image_buffer, 'PNG')
-        key.set_contents_from_string(image_buffer.getvalue())
-        url = key.generate_url(60,query_auth=True, force_http=True)
-        return url
+    The following settings are very sensitive and should be passed in through environment variables:
 
+    TWOFACTOR_SECRET: This is secret key that is used to encrypt sensitive data in redis. If redis is compromised, user
+        tokens would not also be compromised unless this secret was also known.
+    TWOFACTOR_S3_BUCKET: The S3 bucket in which QR code images are stored. This bucket should only be readable by the
+        AWS account which uploads the images. Short lived access will be allowed to the images when they are uploaded to
+        allow the user enough time to retrieve the image.
+    """
+
+    @require_settings("TWOFACTOR_SECRET", "TWOFACTOR_ISSUER", "TWOFACTOR_S3_BUCKET", "TWOFACTOR_S3_PROFILE")
     @respond_to("^twofactor verify (?P<token>\w+)")
     def verify_user_twofactor(self, message, token):
-        """
-        twofactor verify [token]: verify your twofactor authentication system
-        """
-        username = message.sender.nick
-        if verify_twofactor(self,username, token):
-            self.reply(message, "You are authenticated, {}".format(username)) 
-        else:
-            self.reply(message, "That's not correct, {}".format(username))
+        """twofactor verify [token]: start a new authenticated session by providing a verification token generated by the external device"""
+        user = User.get_from_message(self, message)
+        if not user:
+            return
 
+        if user.verify_token(token):
+            self.direct_reply(message, "You are authenticated, your session expires {}".format(self.to_natural_day_and_time(user.session_expiration_time)))
+        else:
+            self.direct_reply(message, "Authentication failed, please try again")
+
+        user.save()
+
+    def direct_reply(self, message, content, **kwargs):
+        self.send_direct_message(message.sender["hipchat_id"], content, **kwargs)
 
     @respond_to("^twofactor me")
     def create_user_twofactor(self, message):
-        """
-        twofactor me: set up twofactor authentication for your user
-        """
-        username = message.sender.nick
-        user_twofactor = self.load("user_twofactor", {})
-        if username not in user_twofactor:
-            user_twofactor[username] = pyotp.random_base32()
-            message['type'] = 'chat'
-            self.reply(message, self.generate_and_upload_QR(user_twofactor[username], username))
-            self.save("user_twofactor", user_twofactor)
-            self.reply(message, "say 'twofactor verify <token>' to check your twofactor verification")
+        """twofactor me: generate a new QR code that can be used to configure the external device to generate valid verification tokens"""
+        user = User.get(self, message.sender)
+        if not user:
+            user = User.create(self, message.sender)
+            self.direct_reply(message, user.generate_and_upload_qr_code_image())
+            user.save()
+            self.direct_reply(message, "Say 'twofactor verify [token]' to start an authenticated session")
         else:
-            message['type'] = 'chat'
-            self.reply(message, "twofactor is already set up!") 
+            self.direct_reply(message, "twofactor is already configured")
 
-    @respond_to("^twofactor remove (?P<username>\w+)")
-    def remove_user_twofactor(self, message, username):
-        """
-        twofactor remove [username]: remove [username]'s twofactor authentication (requires 'admin' permission)
-        """
-        if check_user_permission(self, message.sender.nick, 'admin'):  
-            user_twofactor = self.load("user_twofactor", {})
-            if username in user_twofactor:
-                del user_twofactor[username]
-                self.reply(message, "twofactor is removed for {}".format(username)) 
-                self.save("user_twofactor", user_twofactor)
-            else:
-                self.reply(message, "twofactor was not set for {}".format(username)) 
+    @respond_to("^twofactor status")
+    def twofactor_status(self, message):
+        """twofactor status: tells you if you are currently authenticated and when your session ends"""
+        user = User.get_from_message(self, message)
+        if not user:
+            return
+
+        if user.is_authenticated:
+            self.direct_reply(message, "You are authenticated, your session expires {}".format(self.to_natural_day_and_time(user.session_expiration_time)))
         else:
-            self.say("@{}: you don't have admin permission".format(message.sender.nick), message=message) 
+            self.direct_reply(message, "You are not authenticated")
 
-    @respond_to("^what can (?P<username>\w+) do")
-    def show_user_permission(self, message, username):
-        """
-        what can [username] do?: get someone's permissions
-        """
-        if 'i' == username.lower():
-            username = message.sender.nick
-        user_permissions = self.load("user_permissions", {})
-        try:
-            self.say("@{}: {}'s permissions are: {}".format(message.sender.nick, username, ', '.join(user_permissions[username])), message=message) 
-        except KeyError:
-            self.say("@{}: I don't know who {} is. (no permissions)".format(message.sender.nick, username), message=message)
+    @respond_to("^twofactor logout")
+    def twofactor_logout(self, message):
+        """twofactor logout: terminate an authenticated session"""
+        user = User.get_from_message(self, message)
+        if not user:
+            return
 
+        user.logout()
+        user.save()
+        self.direct_reply(message, "Your authenticated session has been terminated")
 
-    @respond_to("^who can(?P<permissions>( \w+)+)")
-    def find_user_permission(self, message, permissions):
-        """
-        who can [permission]?: find the list of people with a permission
-        """
-        user_permissions = self.load("user_permissions", {})
-        userlist = [user for user, user_perm in user_permissions.items() 
-                for permission in permissions.split() 
-                    if permission in user_perm]
-        self.say("@{}: {} can {}".format(message.sender.nick, ', '.join(userlist), permission), message=message)
+    @respond_to("^twofactor remove (?P<nick>\w+)")
+    @requires_permission('administer_twofactor')
+    def remove_user_twofactor(self, message, nick):
+        """twofactor remove [nick]: remove [nick]'s twofactor authentication (requires the 'administer_twofactor' permission)"""
+        user_to_remove = User.get_from_nick(self, nick)
+        if user_to_remove:
+            user_to_remove.delete()
+            self.direct_reply(message, "Successfully removed twofactor authentication for user '{}'".format(nick))
+        else:
+            self.direct_reply(message, "I could not find user '{}', no action was taken".format(nick))
 
-    @respond_to("^can I(?P<permissions>( \w+)+)")
+    @respond_to("^show permissions for (?P<nick>\w+)")
+    @requires_permission('view_permissions')
+    def show_user_permission(self, message, nick):
+        """show permissions for [nick]: get permissions for a user (requires the 'view_permissions' permission)"""
+        user = User.get_from_nick(self, nick)
+        if not user:
+            self.direct_reply(message, "I could not find user '{}'".format(nick))
+        else:
+            self.direct_reply(message, "User '{}' has permissions {}".format(user.nick, ', '.join(user.permissions)))
+
+    @respond_to("^can I(?P<permissions>( [\w.:-]+)+)")
     def confirm_user_permission(self, message, permissions):
-        """
-        can I [permission]?: check if you have a specific permission
-        """
+        """can I [permission]?: check if you have a specific permission"""
+        user = User.get_from_message(self, message)
+        if not user:
+            return
+
+        if not user.is_authenticated:
+            self.direct_reply(message, "I am unable to check your permissions because you are not authenticated. Please start an authenticated session by saying 'twofactor verify [token]'.")
+            return
+
         for permission in permissions.split():
-            if check_user_permission(self, message.sender.nick, permission):  
-                self.say("@{}: Yes, you can {}".format(message.sender.nick, permission), message=message)
+            if user.has_permission(permission):
+                self.direct_reply(message, "Yes, you can {}".format(permission))
             else:
-                self.say("@{}: No, you can't {}".format(message.sender.nick, permission), message=message)
+                self.direct_reply(message, "No, you can't {}".format(permission))
+
+    @respond_to("^give (?P<nick>\w+) permission(?P<permissions>( [\w.:-]+)+)")
+    @requires_permission('grant_permissions')
+    def give_user_permission(self, message, nick, permissions):
+        """give [nick] permission to [permission]: grant [nick] a permission (requires the 'grant_permissions' permission)"""
+        requested_permissions = permissions.split()
+        try:
+            requested_permissions.remove("to")
+        except ValueError:
+            pass
+
+        if len(requested_permissions) == 0:
+            self.direct_reply(message, 'At least one permission must be specified')
+            return
+
+        user = User.get_from_nick(self, nick)
+        if not user:
+            self.direct_reply("The user '{}' has not setup two-factor authentication, please have them do so before modifying permissions")
+            return
+
+        user.grant_permissions(requested_permissions)
+        user.save()
+
+        self.direct_reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
+
+    @respond_to("^take away from (?P<nick>\w+) permission(?P<permissions>( [\w.:-]+)+)")
+    @requires_permission('revoke_permissions')
+    def remove_user_permission(self, message, nick, permissions):
+        """take away from [nick] permission to [permission]: remove [nick]'s permission (requires the 'revoke_permissions' permission)"""
+        requested_permissions = permissions.split()
+        try:
+            requested_permissions.remove("to")
+        except ValueError:
+            pass
+
+        if len(requested_permissions) == 0:
+            self.direct_reply(message, 'At least one permission must be specified')
+            return
+
+        user = User.get_from_nick(self, nick)
+        if not user:
+            self.direct_reply("The user '{}' has not setup two-factor authentication, please have them do so before modifying permissions")
+            return
+
+        user.revoke_permissions(requested_permissions)
+        user.save()
+
+        self.direct_reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
 
 
+class User(object):
+    """
+    Represents a user.
 
-    @respond_to("^give (?P<username>\w+) permission(?P<permissions>( \w+)+)")
-    def give_user_permission(self, message, username, permissions):
+    Contains sufficient information to determine if they are authenticated and what permissions they have.
+
+    Constructor Arguments:
+
+        plugin: The plugin that is currently responding to a message.
+        user_metadata: A dictionary that contains a "nick" key and a "hipchat_id". This dictionary is used by will to
+            represent a user quite frequently.
+        token: The secret base32 TOTP token used to verify transient tokens provided by external devices. This is as
+            sensitive as a user's password and should be handled with care.
+        permissions: A set() containing strings that represent all permissions the user has been granted.
+        verified_time: The last time the user verified their identity as a datetime object with tzinfo == UTC.
+    """
+
+    # Design notes
+
+    # All of the data about that user that needs to be persisted is stored in a dictionary in the key-value store. Each
+    # user has their own key. Since the bot may be responding to several requests at once on different threads, this
+    # seemed safer than having one massive dictionary storing all user information in it (fewer race conditions). That
+    # said - some race conditions to exists, particularly around permission management. If two admins decide to modify
+    # permissions of a particular user at roughly the same time, then one of them will overwrite the other which may
+    # not be the desired effect. This could be mitigated by taking advantage of some of Redis's built in "set"
+    # management features.
+
+    # From a performance standpoint, some calls here require calls to the hipchat API. I know (for example) that
+    # retrieving the user's timezone requires one such call. I suspect others do as well, however, the calls are made
+    # deep inside Will, so it's not abundantly clear which function calls result in API calls and which ones don't.
+    # If there were performance problems, or we start hitting rate limits on the hipchat API we could cache stuff like
+    # the timezone in Redis, and just assume it's very "slow changing".
+
+    DEFAULT_SESSION_DURATION = 30 * 60  # 30 minutes in seconds
+
+    def __init__(self, plugin, user_metadata, token, permissions, verified_time=None):
+        self.nick = user_metadata['nick']
+        self.hipchat_id = user_metadata['hipchat_id']
+        self.totp = pyotp.TOTP(token)
+        self.token = token
+        self.permissions = permissions
+        self.plugin = plugin
+        self.verified_time = verified_time
+        self.session_duration = getattr(settings, 'TWOFACTOR_SESSION_DURATION', self.DEFAULT_SESSION_DURATION)
+
+    def verify_token(self, entered_token):
         """
-        give [username] permission to [permission]: grant a user a permission (requires 'grant' permission)
+        Return True iff the entered_token is valid given the TOTP secret for this user.
+
+        Side effects: if the token is valid then self.verified_time is updated to the current time.
         """
-        if check_user_permission(self, message.sender.nick, 'grant'):  
-            requested_permissions = permissions.split()
-            try:
-                requested_permissions.remove("to")
-            except ValueError:
-                pass
-            try:
-                user_permissions = self.load("user_permissions", {})
-                new_permissions = list(set(requested_permissions + user_permissions[username]))
-            except KeyError:
-                new_permissions = requested_permissions
-            user_permissions[username] = new_permissions
-            self.save("user_permissions", user_permissions)
-            self.say("@{}: new permissions for {} are: {} ".format(message.sender.nick, username, ', '.join(new_permissions)), message=message) 
+        is_valid = self.totp.verify(entered_token)
+        if is_valid:
+            self.verified_time = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        return is_valid
+
+    @property
+    def is_authenticated(self):
+        """True iff the user has successfully authenticated recently enough that their session hasn't expired"""
+        if self.verified_time is None:
+            return False
+
+        now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
+        seconds_since_last_verify = (now - self.verified_time).total_seconds()
+        return seconds_since_last_verify < self.session_duration
+
+    @property
+    def timezone(self):
+        """The user's timezone as a pytz.timezone()"""
+        if not hasattr(self, '_timezone'):
+            full_user_info = self.plugin.get_hipchat_user(self.hipchat_id)
+            self._timezone = pytz.timezone(full_user_info['timezone'])
+
+        return self._timezone
+
+    def localize_time(self, dt):
+        """Given a datetime object, localize it in the user's timezone"""
+        return dt.astimezone(self.timezone)
+
+    @property
+    def session_expiration_time(self):
+        """The localized datetime that the user's session expires or None"""
+        if self.verified_time is None:
+            return None
+
+        return self.localize_time(self.verified_time + datetime.timedelta(seconds=self.session_duration))
+
+    def logout(self):
+        """
+        Ensure that the user has to authenticate again once this action completes if they wish to continue the session.
+        """
+        self.verified_time = None
+
+    def save(self):
+        """
+        Persist the model in the plugin storage.
+
+        Note this encrypts the secure token before storing it externally.
+        """
+        as_dict = {
+            'token': encrypt(settings.TWOFACTOR_SECRET, self.token),
+            'permissions': self.permissions,
+        }
+        if self.verified_time:
+            as_dict['verified_time'] = self.verified_time
+        self.plugin.save(User.get_key(self.hipchat_id), as_dict)
+
+    def delete(self):
+        """Remove the user"""
+        self.plugin.clear(User.get_key(self.hipchat_id))
+
+    def generate_and_upload_qr_code_image(self):
+        """
+        Generate a QR code that can be used to configure Google Authenticator.
+
+        This URL can be accessed for 60 seconds by anyone who has it, so it should be handled with care.
+        """
+        s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
+        s3_twofactor_path_prefix = ''
+        parsed_url = urlparse.urlparse(s3_twofactor_bucket)
+        if parsed_url.scheme == 's3':
+            s3_twofactor_path_prefix = parsed_url.path
+            s3_twofactor_bucket = parsed_url.netloc
+
+        url = self.totp.provisioning_uri(self.nick, issuer_name=settings.TWOFACTOR_ISSUER)
+        img = qrcode.make(url)
+        conn = boto.connect_s3(profile_name=settings.TWOFACTOR_S3_PROFILE)
+        bucket = conn.get_bucket(s3_twofactor_bucket)
+        key = Key(bucket)
+        key.key = '{path}{name}-qr.png'.format(
+            path=s3_twofactor_path_prefix,
+            name=base64.urlsafe_b64encode(self.hipchat_id)
+        )
+        image_buffer = cStringIO.StringIO()
+        img.save(image_buffer, 'PNG')
+        key.set_contents_from_string(image_buffer.getvalue())
+        url = key.generate_url(10, query_auth=True)
+        return url
+
+    def has_permission(self, permission):
+        """True iff the user is authenticated and has the requested permission."""
+        if not self.is_authenticated:
+            return False
+        return permission in self.permissions
+
+    def grant_permissions(self, permissions):
+        """Give the user new permissions"""
+        self.permissions.update(permissions)
+
+    def revoke_permissions(self, permissions):
+        """Take away some permissions from the user"""
+        self.permissions.difference_update(permissions)
+
+    @staticmethod
+    def get(plugin, user_metadata):
+        """Retrieve a user given a user_metadata dictionary, returns None if the user has never setup two-factor authentication"""
+        if user_metadata is None:
+            return None
+
+        hipchat_id = user_metadata['hipchat_id']
+        as_dict = plugin.load(User.get_key(hipchat_id))
+        if as_dict:
+            decrypted_token = decrypt(settings.TWOFACTOR_SECRET, as_dict['token'])
+            return User(plugin, user_metadata, decrypted_token, as_dict['permissions'], as_dict.get('verified_time'))
         else:
-            self.say("@{}: you don't have grant permission".format(message.sender.nick), message=message) 
+            return None
 
+    @staticmethod
+    def get_from_nick(plugin, nick):
+        """Retrieve a user given a nick, returns None if the user has never setup two-factor authentication"""
+        user_metadata = None
+        for jid, info in plugin.internal_roster.items():
+            if info["nick"] == nick:
+                user_metadata = info
 
-    @respond_to("^take away from (?P<username>\w+) permission(?P<permissions>( \w+)+)")
-    def remove_user_permission(self, message, username, permissions):
-        """
-        take away from [username] permission [permission]: remove someone's permission (requires grant permission)
-        """
-        if check_user_permission(self, message.sender.nick, 'grant'):  
-            requested_permissions = permissions.split()
-            try:
-                requested_permissions.remove("to")
-            except ValueError:
-                pass
-            try:
-                user_permissions = self.load("user_permissions", {})
-                for permission in requested_permissions:
-                    try:
-                        user_permissions[username].remove(permission)
-                    except ValueError:
-                        pass
-            except KeyError:
-                pass
-            self.save("user_permissions", user_permissions)
-            self.say("@{}: new permissions for {} are: {} ".format(message.sender.nick, username, ', '.join(user_permissions[username])), message=message) 
+        return User.get(plugin, user_metadata)
+
+    @staticmethod
+    def get_from_message(plugin, message):
+        """Retrieve a user given a message sent by the user, returns None if the user has never setup two-factor authentication"""
+        user_metadata = plugin.get_user_from_message(message)
+        user = User.get(plugin, user_metadata)
+        if not user:
+            plugin.direct_reply(message, "You have not setup authentication, please say 'twofactor me' to start setup")
+        return user
+
+    @staticmethod
+    def create(plugin, user_metadata):
+        """Creates a new user given the user_metadata dictionary, assigns a new random secret"""
+        user = User.get(plugin, user_metadata)
+        if not user:
+            token = pyotp.random_base32()
+            permissions = set()
+            if user_metadata['nick'] in getattr(settings, 'ADMIN_USERS', '').split(','):
+                permissions = set(['administer_twofactor', 'grant_permissions', 'revoke_permissions', 'view_permissions'])
+            return User(plugin, user_metadata, token, permissions)
         else:
-            self.say("@{}: you don't have grant permission".format(message.sender.nick), message=message) 
+            return None
 
+    @staticmethod
+    def get_key(hipchat_id):
+        """The key used to store the user in the plugin storage system"""
+        return 'twofactor:user:{}'.format(hipchat_id)
