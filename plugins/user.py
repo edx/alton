@@ -18,7 +18,6 @@ log = logging.getLogger(__name__)
 
 
 # TODO: QR code over hipchat leaves the account vulnerable if the client renders the image and leaves it rendered in the chat history
-# TODO: Maybe vulnerable to brute force attacks, is there any rate limiting from client -> hipchat? or hipchat -> bot?
 # TODO: Create a "twofactor:permission:<user_id>" key whose value is a set in redis so that we can use SADD and other set operations to manage permission grant/revoke
 # TODO: Tell users that you are responding in private chat when they try to run these commands from a room
 
@@ -182,6 +181,21 @@ class UserPlugin(WillPlugin):
             self.direct_reply(message, "I could not find user '{}'".format(nick))
         else:
             self.direct_reply(message, "User '{}' has permissions {}".format(user.nick, ', '.join(user.permissions)))
+
+    @respond_to("^who can (?P<permission>([\w.:-]+))")
+    @requires_permission('view_permissions')
+    def get_users_for_permissions(self, message, permission):
+        """who can [permission]?: see which users have a particular permission (requires the 'view_permissions' permission)"""
+
+        nicks_with_perm = []
+        for user in User.list(self):
+            if user.has_permission(permission):
+                nicks_with_perm.append(user.nick)
+
+        if len(nicks_with_perm) > 0:
+            self.direct_reply(message, "The following users have permission to '{}': {}".format(permission, ', '.join(nicks_with_perm)))
+        else:
+            self.direct_reply(message, "No users have permission to '{}'".format(permission))
 
     @respond_to("^can I(?P<permissions>( [\w.:-]+)+)")
     def confirm_user_permission(self, message, permissions):
@@ -423,6 +437,7 @@ class User(object):
         for jid, info in plugin.internal_roster.items():
             if info["nick"] == nick:
                 user_metadata = info
+                break
 
         return User.get(plugin, user_metadata)
 
@@ -447,6 +462,22 @@ class User(object):
             return User(plugin, user_metadata, token, permissions)
         else:
             return None
+
+    @staticmethod
+    def list(plugin):
+        """Get a list of all users"""
+        users_by_id = {}
+        for jid, info in plugin.internal_roster.items():
+            users_by_id[info['hipchat_id']] = info
+
+        users = []
+        for key in plugin.storage.keys('twofactor:user:*'):
+            hipchat_id = key.split(':')[2]
+            user = User.get(plugin, users_by_id[hipchat_id])
+            if user:
+                users.append(user)
+
+        return users
 
     @staticmethod
     def get_key(hipchat_id):
