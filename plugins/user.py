@@ -17,11 +17,6 @@ import logging
 log = logging.getLogger(__name__)
 
 
-# TODO: QR code over hipchat leaves the account vulnerable if the client renders the image and leaves it rendered in the chat history
-# TODO: Create a "twofactor:permission:<user_id>" key whose value is a set in redis so that we can use SADD and other set operations to manage permission grant/revoke
-# TODO: Tell users that you are responding in private chat when they try to run these commands from a room
-
-
 def requires_permission(permission):
     """
     A decorator that ensures the user sending the message is authenticated and authorized to perform the action.
@@ -143,7 +138,7 @@ class UserPlugin(WillPlugin):
         user = User.get(self, message.sender)
         if not user:
             user = User.create(self, message.sender)
-            self.direct_reply(message, user.generate_and_upload_qr_code_image())
+            self.direct_reply(message, user.generate_and_upload_qr_code_image(), html=True)
             user.save()
             self.direct_reply(message, "Say 'twofactor verify [token]' to start an authenticated session")
         else:
@@ -316,6 +311,7 @@ class User(object):
     # the timezone in Redis, and just assume it's very "slow changing".
 
     DEFAULT_SESSION_DURATION = 30 * 60  # 30 minutes in seconds
+    QR_CODE_VALIDITY_DURATION = 10 * 60  # 10 minutes in seconds
 
     def __init__(self, plugin, user_metadata, token, permissions, verified_time=None):
         self.nick = user_metadata['nick']
@@ -411,15 +407,20 @@ class User(object):
         conn = boto.connect_s3(profile_name=settings.TWOFACTOR_S3_PROFILE)
         bucket = conn.get_bucket(s3_twofactor_bucket)
         key = Key(bucket)
-        key.key = '{path}{name}-qr.png'.format(
+        key.content_type = 'text/html'
+        key.key = '{path}{name}-qr'.format(
             path=s3_twofactor_path_prefix,
             name=base64.urlsafe_b64encode(self.hipchat_id)
         )
+        html_buffer = cStringIO.StringIO()
+        html_buffer.write('<html><head></head><body>')
         image_buffer = cStringIO.StringIO()
         img.save(image_buffer, 'PNG')
-        key.set_contents_from_string(image_buffer.getvalue())
-        url = key.generate_url(10, query_auth=True)
-        return url
+        data_uri = image_buffer.getvalue().encode('base64').replace('\n', '')
+        html_buffer.write('<img src="data:image/png;base64,{0}"/></body></html>'.format(data_uri))
+        key.set_contents_from_file(html_buffer, encrypt_key=True, rewind=True)
+        url = key.generate_url(self.QR_CODE_VALIDITY_DURATION, query_auth=True)
+        return 'This link is valid for {} minutes: <a href="{}">View QR code</a>'.format(self.QR_CODE_VALIDITY_DURATION / 60, url)
 
     def has_permission(self, permission):
         """True iff the user is authenticated and has the requested permission."""
