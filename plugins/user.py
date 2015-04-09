@@ -310,8 +310,8 @@ class User(object):
     # If there were performance problems, or we start hitting rate limits on the hipchat API we could cache stuff like
     # the timezone in Redis, and just assume it's very "slow changing".
 
-    DEFAULT_SESSION_DURATION = 30 * 60  # 30 minutes in seconds
-    QR_CODE_VALIDITY_DURATION = 10 * 60  # 10 minutes in seconds
+    SESSION_DURATION = getattr(settings, 'TWOFACTOR_SESSION_DURATION', 30 * 60)  # 30 minutes in seconds
+    QR_CODE_VALIDITY_DURATION = getattr(settings, 'TWOFACTOR_QR_CODE_VALIDITY_DURATION', 10 * 60)  # 10 minutes in seconds
 
     def __init__(self, plugin, user_metadata, token, permissions, verified_time=None):
         self.nick = user_metadata['nick']
@@ -321,7 +321,6 @@ class User(object):
         self.permissions = permissions
         self.plugin = plugin
         self.verified_time = verified_time
-        self.session_duration = getattr(settings, 'TWOFACTOR_SESSION_DURATION', self.DEFAULT_SESSION_DURATION)
 
     def verify_token(self, entered_token):
         """
@@ -342,7 +341,7 @@ class User(object):
 
         now = datetime.datetime.utcnow().replace(tzinfo=pytz.utc)
         seconds_since_last_verify = (now - self.verified_time).total_seconds()
-        return seconds_since_last_verify < self.session_duration
+        return seconds_since_last_verify < self.SESSION_DURATION
 
     @property
     def timezone(self):
@@ -363,7 +362,7 @@ class User(object):
         if self.verified_time is None:
             return None
 
-        return self.localize_time(self.verified_time + datetime.timedelta(seconds=self.session_duration))
+        return self.localize_time(self.verified_time + datetime.timedelta(seconds=self.SESSION_DURATION))
 
     def logout(self):
         """
