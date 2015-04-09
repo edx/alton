@@ -95,21 +95,37 @@ class UserPlugin(WillPlugin):
 
     The settings used to configure this plugin are (can be placed in config.py):
 
-    TWOFACTOR_ISSUER: This is the name of the bot (typically). It will appear above the user's name in the app that
-        generates the rotating keys to identify the code. Many of the apps will generate keys for several providers, so
-        this string should uniquely identify your bot.
-    TWOFACTOR_S3_PROFILE: The boto profile to use to connect to S3. The machine that is running the bot is expected to
-        have a boto configuration file present that contains the various credentials needed to connect to AWS to perform
-        various actions. The credentials referenced by this profile must be able to be used to upload new keys to the S3
-        bucket specified by TWOFACTOR_S3_BUCKET and generate URLs for those objects.
-
-    The following settings are very sensitive and should be passed in through environment variables:
+    The following settings are required and should be passed in through environment variables (for security reasons):
 
     TWOFACTOR_SECRET: This is secret key that is used to encrypt sensitive data in redis. If redis is compromised, user
         tokens would not also be compromised unless this secret was also known.
+
     TWOFACTOR_S3_BUCKET: The S3 bucket in which QR code images are stored. This bucket should only be readable by the
         AWS account which uploads the images. Short lived access will be allowed to the images when they are uploaded to
         allow the user enough time to retrieve the image.
+
+    ADMIN_USERS: This is expected to be a comma separated list of users who will be automatically granted administrative
+        privileges. They will be able to manage the authentication of other users etc. At least one user must have
+        administrative privileges in order to grant the permission to grant permissions to other users.
+
+    The following settings are optional, but can be used to configure behavior:
+
+    TWOFACTOR_SESSION_DURATION (default = 1800): The number of seconds an authenticated session should last. After this
+        amount of time has elapsed since a user last verified they are automatically logged out.
+
+    TWOFACTOR_QR_CODE_VALIDITY_DURATION (default = 600): The number of seconds the URL for a generated QR code should be
+        "live". Once the code is generated, the user has this many seconds to click the link. If they fail to click the
+        link during that time the image will no longer be accessible and an admin will have to unlock their account.
+
+    TWOFACTOR_ISSUER (default = Alton): This is the name of the bot (typically). It will appear above the user's name in
+        the app that generates the rotating keys to identify the code. Many of the apps will generate keys for several
+        providers, so this string should uniquely identify your bot.
+
+    TWOFACTOR_S3_PROFILE (default = None): The boto profile to use to connect to S3. The machine that is running the bot can
+        have a boto configuration file present that contains the various credentials needed to connect to AWS to perform
+        various actions. The credentials referenced by this profile must be able to be used to upload new keys to the S3
+        bucket specified by TWOFACTOR_S3_BUCKET and generate URLs for those objects. If no profile is provided, the
+        credentials are expected to be provided via other means (default credentials, environment vars, IAM role etc).
     """
 
     @require_settings("TWOFACTOR_SECRET", "TWOFACTOR_ISSUER", "TWOFACTOR_S3_BUCKET", "TWOFACTOR_S3_PROFILE")
@@ -390,9 +406,9 @@ class User(object):
 
     def generate_and_upload_qr_code_image(self):
         """
-        Generate a QR code that can be used to configure Google Authenticator.
+        Generate a QR code that can be used to configure Google Authenticator and return a link to a page that displays it.
 
-        This URL can be accessed for 60 seconds by anyone who has it, so it should be handled with care.
+        This URL can be accessed for by anyone who has it (for a period of time), so it should be handled with care.
         """
         s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
         s3_twofactor_path_prefix = ''
@@ -401,9 +417,9 @@ class User(object):
             s3_twofactor_path_prefix = parsed_url.path
             s3_twofactor_bucket = parsed_url.netloc
 
-        url = self.totp.provisioning_uri(self.nick, issuer_name=settings.TWOFACTOR_ISSUER)
+        url = self.totp.provisioning_uri(self.nick, issuer_name=getattr(settings, 'TWOFACTOR_ISSUER', 'Alton'))
         img = qrcode.make(url)
-        conn = boto.connect_s3(profile_name=settings.TWOFACTOR_S3_PROFILE)
+        conn = boto.connect_s3(profile_name=getattr(settings, 'TWOFACTOR_S3_PROFILE', None))
         bucket = conn.get_bucket(s3_twofactor_bucket)
         key = Key(bucket)
         key.content_type = 'text/html'
@@ -417,6 +433,7 @@ class User(object):
         context = {
             'image_data': image_data,
             'secret': self.token,
+            'code_display_time': self.QR_CODE_VALIDITY_DURATION,
         }
         rendered_html = rendered_template('qr_code.html', context)
         key.set_contents_from_string(rendered_html, encrypt_key=True)
