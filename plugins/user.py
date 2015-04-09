@@ -1,5 +1,5 @@
 from will.plugin import WillPlugin
-from will.decorators import respond_to, require_settings
+from will.decorators import respond_to, require_settings, rendered_template
 from will import settings
 import pyotp
 import qrcode
@@ -412,13 +412,15 @@ class User(object):
             path=s3_twofactor_path_prefix,
             name=base64.urlsafe_b64encode(self.hipchat_id)
         )
-        html_buffer = cStringIO.StringIO()
-        html_buffer.write('<html><head></head><body>')
         image_buffer = cStringIO.StringIO()
         img.save(image_buffer, 'PNG')
-        data_uri = image_buffer.getvalue().encode('base64').replace('\n', '')
-        html_buffer.write('<img src="data:image/png;base64,{0}"/></body></html>'.format(data_uri))
-        key.set_contents_from_file(html_buffer, encrypt_key=True, rewind=True)
+        image_data = image_buffer.getvalue().encode('base64').replace('\n', '')
+        context = {
+            'image_data': image_data,
+            'secret': self.token,
+        }
+        rendered_html = rendered_template('qr_code.html', context)
+        key.set_contents_from_string(rendered_html, encrypt_key=True)
         url = key.generate_url(self.QR_CODE_VALIDITY_DURATION, query_auth=True)
         return 'This link is valid for {} minutes: <a href="{}">View QR code</a>'.format(self.QR_CODE_VALIDITY_DURATION / 60, url)
 
