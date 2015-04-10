@@ -1,27 +1,77 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
+    <meta charset="utf-8">
+    <title>Alton Two-factor Authentication</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="//fonts.googleapis.com/css?family=Raleway:400,300,600" rel="stylesheet" type="text/css">
+    <link href="//cdnjs.cloudflare.com/ajax/libs/normalize/3.0.3/normalize.min.css" rel="stylesheet" type="text/css"/>
+    <link href="//cdnjs.cloudflare.com/ajax/libs/skeleton/2.0.4/skeleton.min.css" rel="stylesheet" type="text/css"/>
     <style type="text/css" media="print">
         body { visibility: hidden; display: none }
     </style>
 </head>
 <body>
-    <div>Below is your secure key, in plain text and in a QR code. Do not write down the code or print out this page, simply enter it into your authentication device and then close this page. If you lose access to your account an administrator can send you a new code.</div>
-    <div>Recommended app instructions: <a href="https://support.google.com/accounts/answer/1066447">Google Authenticator</a></div>
-    <hr/>
-    <div id="container">
-        <div id="secure">
-            <div>For security reasons, these keys will disappear in <span id="timer"></span> seconds. If you need more time click <a href="#" onclick="timeLeft+=30">here</a> to wait an additional 30 seconds.</div>
-            <div id="key">Key: {{ secret }}</div>
-            <div id="qr"><img src="data:image/png;base64,{{ image_data }}"/></div>
+    <div class="container">
+        <div class="row">
+            <div class="one-half column" style="margin-top: 10%">
+                <h2>
+                    Do not write down the code or print out this page!
+                </h2>
+                <p>
+                    You have <span id="timer"></span> to scan the code.
+                    <br/>
+                    You can click <a href="#" onclick="timeLeft+=30">here</a> to wait an additional 30 seconds.
+                </p>
+                <p>
+                    Recommended app instructions: <a href="https://support.google.com/accounts/answer/1066447">Google Authenticator</a>
+                </p>
+            </div>
+            <div class="one-half column" id="container">
+                <div id="secure">
+                    <p>
+                        <img src="data:image/png;base64,{{ image_data }}">
+                    </p>
+                    <p style="text-align:center">
+                        Key: {{ secret }}
+                    </p>
+                </div>
+            </div>
         </div>
     </div>
     <script type="text/javascript">
+        function humanReadableTimeRemaining(seconds) {
+            function numberEnding (number) {
+                return (number > 1) ? 's' : '';
+            }
+            var output = '';
+            var hours = Math.floor(seconds / 3600)
+            if (hours) {
+                output += hours + ' hour' + numberEnding(hours) + ' ';
+                seconds -= (hours * 3600);
+            }
+            var minutes = Math.floor(seconds / 60)
+            if (minutes) {
+                output += minutes + ' minute' + numberEnding(minutes) + ' ';
+                seconds -= (minutes * 60);
+            }
+            seconds = Math.floor(seconds)
+            if (seconds) {
+                output += seconds + ' second' + numberEnding(seconds);
+            } else {
+                if (!output) {
+                    output = 'less than a second'
+                }
+            }
+            return output;
+        }
+
         timeLeft = {{ code_display_time }};
-        document.getElementById("timer").innerHTML = timeLeft;
+        document.getElementById("timer").innerHTML = humanReadableTimeRemaining(timeLeft);
 
         removalTimer = window.setInterval(function() {
             timeLeft--;
-            document.getElementById("timer").innerHTML = timeLeft;
+            document.getElementById("timer").innerHTML = humanReadableTimeRemaining(timeLeft);
             if (timeLeft==0) {
                 parent = document.getElementById("container");
                 parent.removeChild(document.getElementById("secure"));
