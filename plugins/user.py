@@ -430,10 +430,11 @@ class User(object):
         image_buffer = cStringIO.StringIO()
         img.save(image_buffer, 'PNG')
         image_data = image_buffer.getvalue().encode('base64').replace('\n', '')
+        js_compatible_utc_timestamp = (datetime.datetime.utcnow() + datetime.timedelta(seconds=self.QR_CODE_VALIDITY_DURATION)).isoformat().split('.')[0]
         context = {
             'image_data': image_data,
             'secret': self.token,
-            'code_display_time': self.QR_CODE_VALIDITY_DURATION,
+            'code_expiration_timestamp': js_compatible_utc_timestamp,
         }
         rendered_html = rendered_template('qr_code.html', context)
         key.set_contents_from_string(rendered_html, encrypt_key=True)

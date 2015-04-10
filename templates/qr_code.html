@@ -16,10 +16,10 @@
         <div class="row">
             <div class="one-half column" style="margin-top: 10%">
                 <h2>
-                    Do not write down the code or print out this page!
+                    Do not write down the key or print out this page!
                 </h2>
                 <p>
-                    You have <span id="timer"></span> to scan the code.
+                    You have <span id="timer"></span> to scan the QR code or input the key.
                     <br/>
                     You can click <a href="#" onclick="timeLeft+=30">here</a> to wait an additional 30 seconds.
                 </p>
@@ -66,13 +66,18 @@
             return output;
         }
 
-        timeLeft = {{ code_display_time }};
+        expiresAt = Date.parse("{{ code_expiration_timestamp }}");
+        timeLeft = Math.floor((expiresAt - new Date())/1000)
+        if (timeLeft < 60) {
+            timeLeft = 60
+        }
         document.getElementById("timer").innerHTML = humanReadableTimeRemaining(timeLeft);
 
         removalTimer = window.setInterval(function() {
-            timeLeft--;
-            document.getElementById("timer").innerHTML = humanReadableTimeRemaining(timeLeft);
-            if (timeLeft==0) {
+            if (timeLeft > 0) {
+                timeLeft--;
+                document.getElementById("timer").innerHTML = humanReadableTimeRemaining(timeLeft);
+            } else {
                 parent = document.getElementById("container");
                 parent.removeChild(document.getElementById("secure"));
                 window.clearInterval(removalTimer);
