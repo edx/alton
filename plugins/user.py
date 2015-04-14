@@ -126,6 +126,7 @@ class UserPlugin(WillPlugin):
     @requires_permission('administer_twofactor')
     def remove_user_twofactor(self, message, nick):
         """twofactor remove [nick]: remove [nick]'s twofactor authentication (requires the 'administer_twofactor' permission)"""
+        self.reply(message, "working on that...")
         user_to_remove = User.get_from_nick(self, nick)
         if user_to_remove:
             user_to_remove.delete()
@@ -160,6 +161,7 @@ class UserPlugin(WillPlugin):
     @respond_to("^(?:show permissions for|what can) (?P<nick>\w+)(?: do|)")
     def show_user_permission(self, message, nick):
         """what can [nick] do: get permissions for a user"""
+        self.reply(message, "working on that...")
         if 'i' == nick.lower():
             nick = message.sender.nick
         user = User.get_from_nick(self, nick)
@@ -169,10 +171,9 @@ class UserPlugin(WillPlugin):
             self.reply(message, "User '{}' has permissions {}".format(user.nick, ', '.join(user.permissions)))
 
     @respond_to("^who can (?P<permission>([\w.:-]+))")
-    def get_users_for_permissions(self, message, permission):
-        
+    def get_users_for_permissions(self, message, permission): 
         """who can [permission]?: see which users have a particular permission"""
-
+        self.reply(message, "working on that...")
         nicks_with_perm = []
         for user in User.list(self):
             if user.has_permission(permission):
@@ -184,9 +185,9 @@ class UserPlugin(WillPlugin):
             self.reply(message, "No users have permission to '{}'".format(permission))
 
     @respond_to("^can I(?P<permissions>( [\w.:-]+)+)")
-    def confirm_user_permission(self, message, permissions):
-        
+    def confirm_user_permission(self, message, permissions): 
         """can I [permission]?: check if you have a specific permission"""
+        self.reply(message, "working on that...")
         user = User.get_from_message(self, message)
         if not user:
             self.reply(message, "You have not set up two-factor authentication.  Say 'twofactor me' to set it up.")
@@ -202,6 +203,7 @@ class UserPlugin(WillPlugin):
     @requires_permission('grant_permissions')
     def give_user_permission(self, message, nick, permissions):
         """grant [nick] permission to [permission]: grant [nick] a permission (requires the 'grant_permissions' permission)"""
+        self.reply(message, "working on that...")
         requested_permissions = permissions.split()
         try:
             requested_permissions.remove("to")
@@ -226,6 +228,7 @@ class UserPlugin(WillPlugin):
     @requires_permission('revoke_permissions')
     def remove_user_permission(self, message, nick, permissions):
         """revoke [permission] from [nick]: remove [nick]'s permission (requires the 'revoke_permissions' permission)"""
+        self.reply(message, "working on that...")
         requested_permissions = permissions.split()
         try:
             requested_permissions.remove("to")
