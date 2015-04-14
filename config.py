@@ -48,13 +48,13 @@
 
 PLUGINS = [
     # Built-ins
-    "will.plugins.admin",
-    "will.plugins.chat_room",
-    "will.plugins.devops",
-    "will.plugins.friendly",
+    # "will.plugins.admin",
+    # "will.plugins.chat_room",
+    # "will.plugins.devops",
+    # "will.plugins.friendly",
     "will.plugins.help",
-    "will.plugins.productivity",
-    "will.plugins.web",
+    # "will.plugins.productivity",
+    # "will.plugins.web",
 
     # All plugins in your project.
     "plugins",
@@ -119,4 +119,4 @@ PLUGIN_BLACKLIST = [
 # Logging level
 LOGLEVEL = "INFO"
 
-
+TWOFACTOR_ISSUER = 'edX Alton'
