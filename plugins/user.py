@@ -123,7 +123,6 @@ class UserPlugin(WillPlugin):
         self.direct_reply(message, "Your authenticated session has been terminated")
 
     @respond_to("^twofactor remove (?P<nick>\w+)")
-    @warn_direct_message
     @requires_permission('administer_twofactor')
     def remove_user_twofactor(self, message, nick):
         """twofactor remove [nick]: remove [nick]'s twofactor authentication (requires the 'administer_twofactor' permission)"""
@@ -134,22 +133,20 @@ class UserPlugin(WillPlugin):
         else:
             self.direct_reply(message, "I could not find user '{}', no action was taken".format(nick))
 
-    @respond_to("^show permissions for (?P<nick>\w+)")
-    @warn_direct_message
-    @requires_permission('view_permissions')
+    @respond_to("^(?:show permissions for|what can) (?P<nick>\w+)(?: do|)")
     def show_user_permission(self, message, nick):
-        """show permissions for [nick]: get permissions for a user (requires the 'view_permissions' permission)"""
+        """show permissions for [nick]: get permissions for a user"""
+        if 'I' == nick:
+            nick = message.sender.nick
         user = User.get_from_nick(self, nick)
         if not user:
-            self.direct_reply(message, "I could not find user '{}'".format(nick))
+            self.reply(message, "I could not find user '{}'".format(nick))
         else:
-            self.direct_reply(message, "User '{}' has permissions {}".format(user.nick, ', '.join(user.permissions)))
+            self.reply(message, "User '{}' has permissions {}".format(user.nick, ', '.join(user.permissions)))
 
     @respond_to("^who can (?P<permission>([\w.:-]+))")
-    @warn_direct_message
-    @requires_permission('view_permissions')
     def get_users_for_permissions(self, message, permission):
-        """who can [permission]?: see which users have a particular permission (requires the 'view_permissions' permission)"""
+        """who can [permission]?: see which users have a particular permission"""
 
         nicks_with_perm = []
         for user in User.list(self):
@@ -157,33 +154,28 @@ class UserPlugin(WillPlugin):
                 nicks_with_perm.append(user.nick)
 
         if len(nicks_with_perm) > 0:
-            self.direct_reply(message, "The following users have permission to '{}': {}".format(permission, ', '.join(nicks_with_perm)))
+            self.reply(message, "The following users have permission to '{}': {}".format(permission, ', '.join(nicks_with_perm)))
         else:
-            self.direct_reply(message, "No users have permission to '{}'".format(permission))
+            self.reply(message, "No users have permission to '{}'".format(permission))
 
     @respond_to("^can I(?P<permissions>( [\w.:-]+)+)")
-    @warn_direct_message
     def confirm_user_permission(self, message, permissions):
         """can I [permission]?: check if you have a specific permission"""
         user = User.get_from_message(self, message)
         if not user:
-            return
-
-        if not user.is_authenticated:
-            self.direct_reply(message, "I am unable to check your permissions because you are not authenticated. Please start an authenticated session by saying 'twofactor verify [token]'.")
+            self.reply(message, "You have not set up two-factor authentication.  Say 'twofactor me' to set it up.")
             return
 
         for permission in permissions.split():
             if user.has_permission(permission):
-                self.direct_reply(message, "Yes, you can {}".format(permission))
+                self.reply(message, "Yes, you can {}".format(permission))
             else:
-                self.direct_reply(message, "No, you can't {}".format(permission))
+                self.reply(message, "No, you can't {}".format(permission))
 
-    @respond_to("^give (?P<nick>\w+) permission(?P<permissions>( [\w.:-]+)+)")
-    @warn_direct_message
+    @respond_to("^(?:give|grant) (?P<nick>\w+) permission(?P<permissions>( [\w.:-]+)+)")
     @requires_permission('grant_permissions')
     def give_user_permission(self, message, nick, permissions):
-        """give [nick] permission to [permission]: grant [nick] a permission (requires the 'grant_permissions' permission)"""
+        """grant [nick] permission to [permission]: grant [nick] a permission (requires the 'grant_permissions' permission)"""
         requested_permissions = permissions.split()
         try:
             requested_permissions.remove("to")
@@ -191,12 +183,12 @@ class UserPlugin(WillPlugin):
             pass
 
         if len(requested_permissions) == 0:
-            self.direct_reply(message, 'At least one permission must be specified')
+            self.reply(message, 'At least one permission must be specified')
             return
 
         user = User.get_from_nick(self, nick)
         if not user:
-            self.direct_reply("The user '{}' has not setup two-factor authentication, please have them do so before modifying permissions")
+            self.reply(message, "The user has not setup two-factor authentication, please have them do so before modifying permissions")
             return
 
         user.grant_permissions(requested_permissions)
@@ -204,27 +196,27 @@ class UserPlugin(WillPlugin):
 
         self.direct_reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
 
-    @respond_to("^take away from (?P<nick>\w+) permission(?P<permissions>( [\w.:-]+)+)")
-    @warn_direct_message
+    @respond_to("^(?:revoke|take away) (?P<permissions>(\w+ )+)from (?P<nick>\w+)")
     @requires_permission('revoke_permissions')
     def remove_user_permission(self, message, nick, permissions):
-        """take away from [nick] permission to [permission]: remove [nick]'s permission (requires the 'revoke_permissions' permission)"""
+        """revoke [permission] from [nick]: remove [nick]'s permission (requires the 'revoke_permissions' permission)"""
         requested_permissions = permissions.split()
         try:
             requested_permissions.remove("to")
+            requested_permissions.remove("permission")
         except ValueError:
             pass
 
         if len(requested_permissions) == 0:
-            self.direct_reply(message, 'At least one permission must be specified')
+            self.reply(message, 'At least one permission must be specified')
             return
 
         user = User.get_from_nick(self, nick)
         if not user:
-            self.direct_reply("The user '{}' has not setup two-factor authentication, please have them do so before modifying permissions")
+            self.reply(message, "The user '{}' has not setup two-factor authentication, please have them do so before modifying permissions")
             return
 
         user.revoke_permissions(requested_permissions)
         user.save()
 
-        self.direct_reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
+        self.reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
