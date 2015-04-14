@@ -133,10 +133,34 @@ class UserPlugin(WillPlugin):
         else:
             self.direct_reply(message, "I could not find user '{}', no action was taken".format(nick))
 
+
+    @respond_to("^twofactor help")
+    def show_twofactor_help(self, message):
+        """twofactor help: Show twofactor help"""
+        self.reply(message, " <b>Two Factor Help:</b><br/>\
+        &nbsp; <b>twofactor me:</b>  set up two factor authentication.<br/>\
+        &nbsp; <b>twofactor verify [token]</b>:  Start a two factor verified session<br/>\
+        &nbsp; <b>twofactor status</b>: tells you if you are currently authenticated and when your session ends<br/>\
+        &nbsp; <b>twofactor logout</b>: terminate an authenticated session<br/>\
+        <b>Admin Functions</b></br>\
+        &nbsp; <b>twofactor remove [nick]</b>: remove [nick]'s twofactor authentication (requires the 'administer_twofactor' permission)", html=True)
+
+    @respond_to("^permissions help")
+    def show_permissions_help(self, message):
+        """permissions help: Show permissions help"""
+        self.reply(message, " <b>Permissions Help:</b><br/>\
+        &nbsp; <b>what can [nick] do</b>: get permissions for a user<br/>\
+        &nbsp; <b>who can [permission]?</b>: see which users have a particular permission<br/>\
+        &nbsp; <b>can I [permission]?</b>: check if you have a specific permission<br/>\
+        <b>Admin Functions</b></br>\
+        &nbsp; <b>grant [nick] permission to [permission]</b>: grant [nick] a permission (requires the 'grant_permissions' permission)<br/>\
+        &nbsp; <b>revoke [permission] from [nick]</b>: remove [nick]'s permission (requires the 'revoke_permissions' permission)", html=True)
+
+
     @respond_to("^(?:show permissions for|what can) (?P<nick>\w+)(?: do|)")
     def show_user_permission(self, message, nick):
-        """show permissions for [nick]: get permissions for a user"""
-        if 'I' == nick:
+        """what can [nick] do: get permissions for a user"""
+        if 'i' == nick.lower():
             nick = message.sender.nick
         user = User.get_from_nick(self, nick)
         if not user:
@@ -146,6 +170,7 @@ class UserPlugin(WillPlugin):
 
     @respond_to("^who can (?P<permission>([\w.:-]+))")
     def get_users_for_permissions(self, message, permission):
+        
         """who can [permission]?: see which users have a particular permission"""
 
         nicks_with_perm = []
@@ -160,6 +185,7 @@ class UserPlugin(WillPlugin):
 
     @respond_to("^can I(?P<permissions>( [\w.:-]+)+)")
     def confirm_user_permission(self, message, permissions):
+        
         """can I [permission]?: check if you have a specific permission"""
         user = User.get_from_message(self, message)
         if not user:
