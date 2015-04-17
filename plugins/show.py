@@ -2,6 +2,7 @@ import boto
 import logging
 import yaml
 import requests
+import time
 from itertools import izip_longest
 from pprint import pformat
 from will import settings
@@ -527,6 +528,8 @@ class ShowPlugin(WillPlugin):
             params['vars'] = play_vars
             params['configuration'] = versions.configuration
             params['configuration_secure'] = versions.configuration_secure
+            params['jobid'] = '{}-{}-{}-{}-{}'.format(message.sender.nick, env, dep, play, time.time())
+            self.save('notify_{}'.format(params['jobid']), '@{}'.format(message.sender.nick))
             if ami_id:
                 params['base_ami'] = ami_id
                 params['use_blessed'] = False
