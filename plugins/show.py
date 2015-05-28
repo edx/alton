@@ -3,6 +3,8 @@ import logging
 import yaml
 import requests
 import time
+import jenkins
+import urllib2
 from itertools import izip_longest
 from pprint import pformat
 from will import settings
@@ -510,13 +512,12 @@ class ShowPlugin(WillPlugin):
     def _notify_abbey(self, message, env, dep, play, versions,
                       noop=False, ami_id=None, verbose=False):
 
-        if not hasattr(settings, 'JENKINS_URL'):
-            msg = "The JENKINS_URL environment setting needs " \
+        if not (hasattr(settings, 'JENKINS_URL') or hasattr(settings, 'JENKINS_API_KEY') or hasattr(settings, 'JENKINS_API_USER')):
+            msg = "The JENKINS_URL and JENKINS_API_KEY environment setting needs " \
                   "to be set so I can build AMIs."
             self.say(msg, message, color='red')
             return False
         else:
-            abbey_url = settings.JENKINS_URL
             play_vars = yaml.safe_dump(
                 versions.play_versions,
                 default_flow_style=False,
@@ -550,15 +551,15 @@ class ShowPlugin(WillPlugin):
             self.say(output, message)
 
             if noop:
-                r = requests.Request('POST', abbey_url, params=params)
-                url = r.prepare().url
-                self.say("Would have posted: {}".format(url), message)
+                self.say("would have requested: {}".format(params), message)
             else:
-                r = requests.post(abbey_url, params=params)
-
-                logging.info("Sent request got {}".format(r))
-                if r.status_code != 200:
-                    self.say("Sent request got {}".format(r),
+                j = jenkins.Jenkins(settings.JENKINS_URL, settings.JENKINS_API_USER, settings.JENKINS_API_KEY)
+                jenkins_job_id = j.get_job_info('build-ami')['nextBuildNumber']
+                self.say("starting job 'build-ami' Job number {}, build token {}".format(jenkins_job_id, params['jobid'])) 
+                try:
+                    j.build_job('build-ami', parameters=params)
+                except urllib2.HTTPError as e:
+                    self.say("Sent request got {}: {}".format(e.code, e.reason),
                              message, color='red')
 
     def _diff_amis(self, first_ami, second_ami, message):
