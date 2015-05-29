@@ -555,7 +555,7 @@ class ShowPlugin(WillPlugin):
             else:
                 j = jenkins.Jenkins(settings.JENKINS_URL, settings.JENKINS_API_USER, settings.JENKINS_API_KEY)
                 jenkins_job_id = j.get_job_info('build-ami')['nextBuildNumber']
-                self.say("starting job 'build-ami' Job number {}, build token {}".format(jenkins_job_id, params['jobid'])) 
+                self.say("starting job 'build-ami' Job number {}, build token {}".format(jenkins_job_id, params['jobid']), message) 
                 try:
                     j.build_job('build-ami', parameters=params)
                 except urllib2.HTTPError as e:
