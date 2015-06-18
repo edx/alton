@@ -9,7 +9,7 @@ class NotifyPlugin(WillPlugin):
         notification_list = self.load("notify_{}".format(build_id), '')
         self.say("{} BuildID: {}, Message: {}".format(notification_list, build_id, text)) 
 
-    @respond_to("^subscribe (@?)(?P<user>\w*) to (?P<build_id>\w*)")
+    @respond_to("^subscribe (@?)(?P<user>\S+) to (?P<build_id>\S+)")
     def subscribe(self, message, user, build_id):
         """
         subscribe [user] to [buildid]: request to be notified when builds complete
