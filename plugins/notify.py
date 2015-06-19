@@ -6,7 +6,12 @@ class NotifyPlugin(WillPlugin):
 
     @route("/notify/<build_id>/<text>")
     def send_notification(self, build_id, text):
-        notification_list = self.load("notify_{}".format(build_id), '')
+        if '@' in build_id:
+            # We're using this to handle the edge case of a notification list that's passed in through jenkins instead of registered in alton.
+            notification_list = build_id
+            self.say("{} Message: {}".format(notification_list, text)) 
+        else:
+            notification_list = self.load("notify_{}".format(build_id), '')
         self.say("{} BuildID: {}, Message: {}".format(notification_list, build_id, text)) 
 
     @respond_to("^subscribe (@?)(?P<user>\S+) to (?P<build_id>\S+)")
