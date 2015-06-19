@@ -531,7 +531,12 @@ class ShowPlugin(WillPlugin):
             params['configuration_secure'] = versions.configuration_secure
             params['jobid'] = '{}-{}-{}-{}-{}'.format(message.sender.nick, env, dep, play, int(time.time()))
             params['callback_url'] = settings.NOTIFY_CALLBACK_URL
-            self.save('notify_{}'.format(params['jobid']), '@{}'.format(message.sender.nick), ex=259200)
+
+            channel = self.get_room_from_message(message)['name']
+            notification_list = {}
+            notification_list[channel] = "@{}".format(message.sender.nick)
+            self.save('notify_{}'.format(params['jobid']), notification_list, expire=259200)
+
             if ami_id:
                 params['base_ami'] = ami_id
                 params['use_blessed'] = False
