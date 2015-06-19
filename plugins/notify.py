@@ -25,7 +25,7 @@ class NotifyPlugin(WillPlugin):
         notification_list = "{} @{}".format(
                 self.load("notify_" + build_id, ''), 
                 user)
-        self.save('notify_{}'.format(build_id), notification_list)
-        self.say("OK, I'll tell {} when I hear about {}".format(', '.join(notification_list.replace("@", "").strip().split(" ")), build_id))
+        self.save('notify_{}'.format(build_id), notification_list, expire=259200)
+        self.reply(message, "OK, I'll tell {} when I hear about {}".format(', '.join(notification_list.replace("@", "").strip().split(" ")), build_id))
 
 
