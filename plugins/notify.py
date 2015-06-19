@@ -9,11 +9,11 @@ class NotifyPlugin(WillPlugin):
         if '@' in build_id:
             # We're using this to handle the edge case of a notification list that's passed in through jenkins instead of registered in alton.
             notification_list = build_id
-            self.say("{} Message: {}".format(notification_list, text)) 
+            self.say("{} Message: {}".format(notification_list, text), notify=True) 
         else:
             notification_list = self.load("notify_" + build_id, {})
             for room in notification_list:
-                self.say("{} BuildID: {}, Message: {}".format(notification_list[room], build_id, text), room=self.get_room_from_name_or_id(room)) 
+                self.say("{} BuildID: {}, Message: {}".format(notification_list[room], build_id, text), room=self.get_room_from_name_or_id(room), notify=True) 
 
     @respond_to("^subscribe (@?)(?P<user>\S+) to (?P<build_id>\S+)")
     def subscribe(self, message, user, build_id):
