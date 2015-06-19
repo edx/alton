@@ -13,7 +13,7 @@ class NotifyPlugin(WillPlugin):
         else:
             notification_list = self.load("notify_" + build_id, {})
             for room in notification_list:
-                self.say("{} BuildID: {}, Message: {}".format(notification_list[room], build_id, text), room=self.get_room_from_name_or_id(room), notify=True) 
+                self.say("{} BuildID: {}, Message: {}".format(' '.join('@'+user for user in notification_list.get(room, [])), build_id, text), room=self.get_room_from_name_or_id(room), notify=True) 
 
     @respond_to("^subscribe (@?)(?P<user>\S+) to (?P<build_id>\S+)")
     def subscribe(self, message, user, build_id):
@@ -23,12 +23,17 @@ class NotifyPlugin(WillPlugin):
         if user == "me":
             user = message.sender.nick
         channel = self.get_room_from_message(message)['name']
-        notification_list = self.load("notify_" + build_id, {})
-        notification_list[channel] = "{} @{}".format(notification_list.get(channel, ""), user)
+        notification_list = self.load("notify_" + build_id, None)
+        if not notification_list:
+            self.reply(message, "Sorry, I don't know about a token named {}".format(build_id), color='red')
+            return
+        notification_list[channel] = notification_list.get(channel, [])
+        notification_list[channel].append(user)
+        notification_list[channel] = list(set(notification_list.get(channel, [])))
+
 
         self.save('notify_{}'.format(build_id), notification_list, expire=259200)
-        self.reply(message, "OK, I'll tell {} when I hear about {}".format(', '.join(
-            notification_list[channel].replace("@", "").strip().split(" ")), 
+        self.reply(message, "OK, I'll tell {} when I hear about {}".format(', '.join(user for user in notification_list.get(channel, [])), 
             build_id))
 
     @respond_to("^who is subscribed to (?P<build_id>\S+)")
@@ -39,7 +44,7 @@ class NotifyPlugin(WillPlugin):
         notification_list = self.load("notify_" + build_id, {})
         self.reply(message, "Subscription list:")
         for room in notification_list:
-            self.reply(message, "{}:  {}".format(room, ', '.join(notification_list[room].replace("@", "").strip().split(" "))))
+            self.reply(message, "{}:  {}".format(room, ', '.join(notification_list.get(room, []))))
 
 
 

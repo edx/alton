@@ -534,7 +534,7 @@ class ShowPlugin(WillPlugin):
 
             channel = self.get_room_from_message(message)['name']
             notification_list = {}
-            notification_list[channel] = "@{}".format(message.sender.nick)
+            notification_list[channel] = [message.sender.nick]
             self.save('notify_{}'.format(params['jobid']), notification_list, expire=259200)
 
             if ami_id:
