@@ -23,9 +23,10 @@ class DeployPlugin(WillPlugin):
     def __init__(self):
         # Build URLS here
         self.BASE_URL="http://18.189.11.177:8080/us-east-1"
+        # TODO: Pull out to a setting.
         self.API_TOKEN={ "asgardApiToken" : "alton:2015-05-27:none@edx.org:8hddZEnR:devops@edx.org" }
         self.cluster_list_url= "{}/cluster/list.json".format(self.BASE_URL)
-        'curl -d "name=helloworld-example-v004" http://asgardprod/us-east-1/cluster/activate'
+        # 'curl -d "name=helloworld-example-v004" http://asgardprod/us-east-1/cluster/activate'
         self.asg_activate_url= "{}/cluster/activate".format(self.BASE_URL)
         self.asg_deactivate_url= "{}/cluster/deactivate".format(self.BASE_URL)
         self.new_asg_url= "{}/cluster/createNextGroup".format(self.BASE_URL)
@@ -33,6 +34,8 @@ class DeployPlugin(WillPlugin):
 
     def deploy(self, message, ami_id):
         self.local.message = message
+
+        # TODO: Pull the EDC from the AMI ID
         #edc = self._edc_for(ami_id)
         edc = EDC("foo", "sandbox", "edxapp")
 
@@ -40,6 +43,8 @@ class DeployPlugin(WillPlugin):
 
         asgs = self._asgs_for_edc(edc)
 
+        # All the ASGs except for the new one
+        # we are about to make.
         old_asgs = self._clusters_for_asgs(asgs)
 
         new_asgs = {}
@@ -47,22 +52,31 @@ class DeployPlugin(WillPlugin):
             new_asgs[cluster] = self._new_asg(cluster, ami_id)
 
         self._wait_for_in_service(new_asgs.values(), 300)
+        print("ASG instances are healthy.")
 
         elbs_to_monitor = []
         for cluster, asg in new_asgs.iteritems():
             self._enable_asg(cluster, asg)        
             elbs_to_monitor.append(self._elbs_for_asg(asg))
 
+        print("All new ASGs are active.  The new instances "
+              "will be available when they pass the healthchecks.")
+
         # Wait for all instances to be in service in all ELBs
         try:
             self._wait_for_healthy_elbs(elbs_to_monitor, 600)
         except:
+            print(" Some instances are failing ELB health checks. "
+                  "Pulling out the new ASG.")
             for cluster, asg in new_asgs.iteritems():
                 self._disable_asg(asg)
 
+        print("New instances have succeeded in passing the healthchecks. "
+              "Disabling old ASGs.")
         for cluster,asg in old_asgs.iteritems():
             self._disable_asg(asg)
-        # Woot! Deploy Done!
+
+        print("Woot! Deploy Done!")
 
     def _edc_for(self, ami_id):
         logging.info("Looking up edc for {}".format(ami_id))
@@ -73,9 +87,17 @@ class DeployPlugin(WillPlugin):
             cluster = tags['cluster']
         else:
             culster = tags['play']
+
+        # TODO How do we want to handle these tags not existing?
+        # raise an exception maybe? Right now this is not safe.
         return EDC(tags['environment'], tags['deployment'], cluster)
 
     def _asgs_for_edc(self, edc):
+        """
+        All AutoScalingGroups that have the tags of this cluster.
+
+        A cluster is made up of many auto_scaling groups.
+        """
         autoscale = boto.connect_autoscale(profile_name=self.local.profile)
         all_groups = autoscale.get_all_groups()
         for group in all_groups:
@@ -101,6 +123,10 @@ class DeployPlugin(WillPlugin):
 
         return tag_dict
     def _clusters_for_asgs(self, asgs):
+        # An autoscaling group can belong to multiple clusters potentially.
+        # This function finds all asgard clusters for a list of ASGs.
+        # eg. get all clusters that have the 'edxapp' cluster tag..
+
         # TODO: Can we cache this and do it less often?
         # response = request.get("http://admin-edx-hammer.edx.org/us-east-1/cluster/list.json")
         request = requests.Request('GET', self.cluster_list_url, params=self.API_TOKEN)
@@ -116,7 +142,7 @@ class DeployPlugin(WillPlugin):
                     relevant_clusters[cluster['cluster']] = cluster['autoScalingGroups']
                     # A cluster can have multiple relevant ASGs.
                     # We don't need to check them all.
-                    break
+                    break # The inner for loop
 
         return relevant_clusters
 
@@ -128,6 +154,7 @@ class DeployPlugin(WillPlugin):
             "trafficAllowed": False,
             "checkHealth": True,
         }
+
         response = requests.post(self.new_asg_url, data=payload, params=self.API_TOKEN)
         print("Send request.")
 
@@ -139,6 +166,11 @@ class DeployPlugin(WillPlugin):
         return self._asgs_for_cluster(cluster)[-1]
 
     def _wait_for_in_service(self, all_asgs, timeout):
+        """
+        Wait for the ASG and all instances in it to be healthy
+        accoding to AWS.
+        """
+
         autoscale = boto.connect_autoscale(profile_name=self.local.profile)
         time_left = timeout
         asgs_left_to_check = list(all_asgs)
