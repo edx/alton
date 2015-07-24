@@ -7,7 +7,7 @@ import requests
 from collections import namedtuple
 from will import settings
 from will.plugin import WillPlugin
-from show import get_ami
+from plugins.show import get_ami
 
 class TimeoutException(Exception):
     pass
@@ -23,8 +23,7 @@ class DeployPlugin(WillPlugin):
     def __init__(self):
         # Build URLS here
         self.BASE_URL="http://18.189.11.177:8080/us-east-1"
-        # TODO: Pull out to a setting.
-        self.API_TOKEN={ "asgardApiToken" : "alton:2015-05-27:none@edx.org:8hddZEnR:devops@edx.org" }
+        self.API_TOKEN={ "asgardApiToken" : settings.ASGARD_API_TOKEN }
         self.cluster_list_url= "{}/cluster/list.json".format(self.BASE_URL)
         # 'curl -d "name=helloworld-example-v004" http://asgardprod/us-east-1/cluster/activate'
         self.asg_activate_url= "{}/cluster/activate".format(self.BASE_URL)
@@ -32,11 +31,13 @@ class DeployPlugin(WillPlugin):
         self.new_asg_url= "{}/cluster/createNextGroup".format(self.BASE_URL)
         #name=helloworld-example&imageId=ami-40788629&trafficAllowed=false&checkHealth=true" 
 
+    @respond_to("^deploy\s+(?<ami_id>ami-\w+)\s+")
+    @requires_permission("deploy")
     def deploy(self, message, ami_id):
         self.local.message = message
 
-        # TODO: Pull the EDC from the AMI ID
-        #edc = self._edc_for(ami_id)
+        # Pull the EDC from the AMI ID
+        # edc = self._edc_for(ami_id)
         edc = EDC("foo", "sandbox", "edxapp")
 
         self.local.profile = edc.deployment
