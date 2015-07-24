@@ -222,7 +222,7 @@ class UserPlugin(WillPlugin):
         user.grant_permissions(requested_permissions)
         user.save()
 
-        self.direct_reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
+        self.reply(message, "New permissions for '{}' are: {} ".format(nick, ', '.join(user.permissions)))
 
     @respond_to("^(?:revoke|take away) (?P<permissions>(\w+ )+)from (?P<nick>\w+)")
     @requires_permission('revoke_permissions')
