@@ -33,36 +33,51 @@ class DeployPlugin(WillPlugin):
         self.asg_activate_url= "{}/cluster/activate".format(self.BASE_URL)
         self.asg_deactivate_url= "{}/cluster/deactivate".format(self.BASE_URL)
         self.new_asg_url= "{}/cluster/createNextGroup".format(self.BASE_URL)
+        self.asg_info_url="{}/autoScaling/show/{}.json".format(self.BASE_URL, "{}")
+
+        # TODO: Fix this, formating to leave in some brackets?
+        self.cluster_info_url = "{}/cluster/show/{}.json".format(self.BASE_URL, "{}")
         #name=helloworld-example&imageId=ami-40788629&trafficAllowed=false&checkHealth=true" 
 
-    @respond_to("^deploy\s+(?P<ami_id>ami-\w+)\s+$")
+    @respond_to("deploy\s+(?P<ami_id>ami-\w+)\s*$")
     @requires_permission("deploy")
     def deploy(self, message, ami_id):
         self.local.message = message
+        self.reply(message, "Ok, here we go...")
 
         # Pull the EDC from the AMI ID
         # edc = self._edc_for(ami_id)
-        edc = EDC("foo", "sandbox", "edxapp")
+        #self.local.profile = edc.deployment
 
-        self.local.profile = edc.deployment
+        # TODO: Remove this and restore the correct code
+        # Just here for the demo.
+        edc = EDC("test", "edx", "edxapp")
+        self.local.profile = "sandbox"
 
+        self.reply(message, "Looking for which clusters to deploy to.")
         asgs = self._asgs_for_edc(edc)
 
         # All the ASGs except for the new one
         # we are about to make.
         old_asgs = self._clusters_for_asgs(asgs)
+        self.reply(message, "Deploying to {}".format(old_asgs.keys()))
 
         new_asgs = {}
         for cluster in old_asgs.keys():
             new_asgs[cluster] = self._new_asg(cluster, ami_id)
 
+        self.reply(message, "New ASGs: {}".format(new_asgs.values()))
         self._wait_for_in_service(new_asgs.values(), 300)
-        self.reply(message, "ASG instances are healthy.")
+        self.reply(message, "ASG instances are healthy. Enabling Traffic.")
 
         elbs_to_monitor = []
         for cluster, asg in new_asgs.iteritems():
-            self._enable_asg(cluster, asg)        
-            elbs_to_monitor.append(self._elbs_for_asg(asg))
+            try:
+                self._enable_asg(cluster, asg)        
+                elbs_to_monitor.append(self._elbs_for_asg(asg))
+            except:
+                self.reply(message, "Something went wrong, disabling traffic.")
+                self._disable_asg(asg)
 
         self.reply(message, "All new ASGs are active.  The new instances "
               "will be available when they pass the healthchecks.")
@@ -107,6 +122,7 @@ class DeployPlugin(WillPlugin):
         all_groups = autoscale.get_all_groups()
         for group in all_groups:
             tags = self._dict_from_tag_list(group.tags)
+            print("Tags: {}".format(tags))
             if not tags:
                 continue
             group_env = tags['environment']
@@ -139,25 +155,29 @@ class DeployPlugin(WillPlugin):
         print("URL: {}".format(url))
         response = requests.get(self.cluster_list_url, params=self.API_TOKEN)
         cluster_json = response.json()
+        # need this to be a list so that we can test membership.
+        asgs = list(asgs) 
 
         relevant_clusters = {}
         for cluster in cluster_json:
             for asg in cluster['autoScalingGroups']:
+                print("Membership: {} in {}: {}".format(asg, asgs, asg in asgs))
                 if asg in asgs:
                     relevant_clusters[cluster['cluster']] = cluster['autoScalingGroups']
                     # A cluster can have multiple relevant ASGs.
                     # We don't need to check them all.
                     break # The inner for loop
 
+        print("Relevant clusters we will deply to: {}".format(relevant_clusters))
         return relevant_clusters
 
     def _new_asg(self, cluster, ami_id):
-        'curl -d "name=helloworld-example&imageId=ami-40788629&trafficAllowed=false&checkHealth=true" http://asgardprod/us-east-1/cluster/createNextGroup'
+        #'curl -d "name=helloworld-example&imageId=ami-40788629&trafficAllowed=false&checkHealth=true" http://asgardprod/us-east-1/cluster/createNextGroup'
         payload = {
             "name": cluster,
             "imageId": ami_id,
-            "trafficAllowed": False,
-            "checkHealth": True,
+#            "trafficAllowed": False,
+#            "checkHealth": True,
         }
 
         response = requests.post(self.new_asg_url, data=payload, params=self.API_TOKEN)
@@ -215,7 +235,7 @@ class DeployPlugin(WillPlugin):
         """
         curl http://admin-edx-hammer.edx.org/us-east-1/autoScaling/show/loadtest-edx-CommonClusterServerAsGroup-V9J31ZEID5C8-v001.json
         """
-        response = requests.get(self.asg_info_url.format(asg))
+        response = requests.get(self.asg_info_url.format(asg), params=self.API_TOKEN)
         elbs = response.json()['group']['loadBalancerNames']
         return elbs
 
@@ -223,7 +243,9 @@ class DeployPlugin(WillPlugin):
         """
         http://admin-edx-hammer.edx.org/us-east-1/cluster/show/loadtest-edx-notes.json
         """
-        response = requests.get(self.cluster_info_url.format(asg))
+        print("URL: {}".format(self.cluster_info_url.format(cluster)))
+        response = requests.get(self.cluster_info_url.format(cluster), params=self.API_TOKEN)
+        print("ASGs for Cluster: {}".format(response.text))
         asgs = response.json()
         asg_names = map(lambda x: x['autoScalingGroupName'], asgs)
         return asg_names
@@ -258,17 +280,23 @@ class DeployPlugin(WillPlugin):
         payload = { "name": asg }
         response = requests.post(self.asg_deactivate_url, data=payload, params=self.API_TOKEN)
         task_url = response.url
-        task_url = task_url.replace('localhost', '18.189.11.177') + '.json'
-        print("URL: {}".format(task_url))
+
+        print("Disable ASG: Status URL: {}".format(task_url))
         
         self._wait_for_task_completion(task_url, 300)
        
     def _wait_for_task_completion(self, task_url, timeout):
+        # TODO: we shouldn't have to do replace the host name but we will have to append '.json'
+        task_url = task_url.replace('localhost', '18.176.5.222')
+
+        if not task_url.endswith('.json'):
+            task_url += ".json"
+
         print("URL: {}".format(task_url))
         time_left = timeout
         while time_left > 0:
-            response = requests.get(task_url)
-            #print(response.text)
+            response = requests.get(task_url, params=self.API_TOKEN)
+            print("Wait response: {}".format(response.text))
             status = response.json()['status']
             if status == 'completed':
                 return
