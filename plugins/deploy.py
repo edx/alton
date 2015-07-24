@@ -7,7 +7,11 @@ import requests
 from collections import namedtuple
 from will import settings
 from will.plugin import WillPlugin
-from plugins.show import get_ami
+from will.decorators import respond_to
+
+from alton.ec2 import get_ami
+from alton.user import requires_permission
+
 
 class TimeoutException(Exception):
     pass
@@ -22,7 +26,7 @@ class DeployPlugin(WillPlugin):
 
     def __init__(self):
         # Build URLS here
-        self.BASE_URL="http://18.189.11.177:8080/us-east-1"
+        self.BASE_URL = settings.ASGARD_API_ENDPOINT
         self.API_TOKEN={ "asgardApiToken" : settings.ASGARD_API_TOKEN }
         self.cluster_list_url= "{}/cluster/list.json".format(self.BASE_URL)
         # 'curl -d "name=helloworld-example-v004" http://asgardprod/us-east-1/cluster/activate'
@@ -31,7 +35,7 @@ class DeployPlugin(WillPlugin):
         self.new_asg_url= "{}/cluster/createNextGroup".format(self.BASE_URL)
         #name=helloworld-example&imageId=ami-40788629&trafficAllowed=false&checkHealth=true" 
 
-    @respond_to("^deploy\s+(?<ami_id>ami-\w+)\s+")
+    @respond_to("^deploy\s+(?P<ami_id>ami-\w+)\s+$")
     @requires_permission("deploy")
     def deploy(self, message, ami_id):
         self.local.message = message
@@ -53,31 +57,31 @@ class DeployPlugin(WillPlugin):
             new_asgs[cluster] = self._new_asg(cluster, ami_id)
 
         self._wait_for_in_service(new_asgs.values(), 300)
-        print("ASG instances are healthy.")
+        self.reply(message, "ASG instances are healthy.")
 
         elbs_to_monitor = []
         for cluster, asg in new_asgs.iteritems():
             self._enable_asg(cluster, asg)        
             elbs_to_monitor.append(self._elbs_for_asg(asg))
 
-        print("All new ASGs are active.  The new instances "
+        self.reply(message, "All new ASGs are active.  The new instances "
               "will be available when they pass the healthchecks.")
 
         # Wait for all instances to be in service in all ELBs
         try:
             self._wait_for_healthy_elbs(elbs_to_monitor, 600)
         except:
-            print(" Some instances are failing ELB health checks. "
+            self.reply(message, " Some instances are failing ELB health checks. "
                   "Pulling out the new ASG.")
             for cluster, asg in new_asgs.iteritems():
                 self._disable_asg(asg)
 
-        print("New instances have succeeded in passing the healthchecks. "
+        self.reply(message, "New instances have succeeded in passing the healthchecks. "
               "Disabling old ASGs.")
         for cluster,asg in old_asgs.iteritems():
             self._disable_asg(asg)
 
-        print("Woot! Deploy Done!")
+        self.reply(message, "Woot! Deploy Done!")
 
     def _edc_for(self, ami_id):
         logging.info("Looking up edc for {}".format(ami_id))
@@ -157,7 +161,7 @@ class DeployPlugin(WillPlugin):
         }
 
         response = requests.post(self.new_asg_url, data=payload, params=self.API_TOKEN)
-        print("Send request.")
+        print("Sent request.")
 
         self._wait_for_task_completion(response.url, 300)
         print("Task complete.")
