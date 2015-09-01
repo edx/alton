@@ -15,26 +15,37 @@ class NotifyPlugin(WillPlugin):
             for room in notification_list:
                 self.say("{} BuildID: {}, Message: {}".format(' '.join('@'+user for user in notification_list.get(room, [])), build_id, text), room=self.get_room_from_name_or_id(room), notify=True) 
 
-    @respond_to("^subscribe (@?)(?P<user>\S+) to (?P<build_id>\S+)")
-    def subscribe(self, message, user, build_id):
+    @respond_to("^subscribe (@?)(?P<users>(\S+ )+)to(?P<build_ids>( \S+)+)")
+    def subscribe(self, message, users, build_ids):
         """
-        subscribe [user] to [buildid]: request to be notified when builds complete
+        subscribe [user user ...] to [buildid buildid ...]: request to be notified when builds complete
         """
-        if user == "me":
-            user = message.sender.nick
         channel = self.get_room_from_message(message)['name']
-        notification_list = self.load("notify_" + build_id, None)
-        if not notification_list:
-            self.reply(message, "Sorry, I don't know about a token named {}".format(build_id), color='red')
-            return
-        notification_list[channel] = notification_list.get(channel, [])
-        notification_list[channel].append(user)
-        notification_list[channel] = list(set(notification_list.get(channel, [])))
+        users = users.split()
+        build_ids = {build_id: None for build_id in build_ids.split()}
 
+        users = [message.sender.nick if user == "me" else user for user in users]
 
-        self.save('notify_{}'.format(build_id), notification_list, expire=259200)
-        self.reply(message, "OK, I'll tell {} when I hear about {}".format(', '.join(user for user in notification_list.get(channel, [])), 
-            build_id))
+        for build_id in build_ids:
+            notification_list = self.load("notify_" + build_id, None)
+            if not notification_list:
+                self.reply(message, "Sorry, I don't know about a token named {}".format(build_id), color='red')
+                return
+            else:
+                build_ids[build_id] = notification_list
+
+        for user in users:
+            for build_id, notification_list in build_ids.iteritems():
+                notification_list[channel] = notification_list.get(channel, [])
+                notification_list[channel].append(user)
+                notification_list[channel] = list(set(notification_list.get(channel, [])))
+                build_ids[build_id] = notification_list
+                self.save('notify_' + build_id, notification_list, expire=259200)
+
+        for build_id in build_ids:
+            self.reply(message, "OK, I'll tell {} when I hear about {}".format(
+                ', '.join(user for user in notification_list.get(channel, [])), 
+                build_id))
 
     @respond_to("^who is subscribed to (?P<build_id>\S+)")
     def check_subscribe(self, message, build_id):
