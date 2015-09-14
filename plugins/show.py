@@ -173,7 +173,7 @@ class ShowPlugin(WillPlugin):
         self._diff_amis(first_ami, second_ami, message)
 
     # A regex to build an AMI for one EDP from another EDP.
-    @respond_to("(?P<verbose>verbose )?(?P<noop>noop )?cut ami for "  # Options
+    @respond_to("^(?P<verbose>verbose )?(?P<noop>noop )?cut ami for "  # Options
                 "(?P<dest_env>\w*)-"            # Destination Environment
                 "(?P<dest_dep>\w*)-"            # Destination Deployment
                 "(?P<dest_play>\w*) "           # Destination Play(Cluster)
@@ -182,7 +182,7 @@ class ShowPlugin(WillPlugin):
                 "(?P<source_dep>\w*)-"          # Source Deployment
                 "(?P<source_play>\w*))?"        # Source Play(Cluster)
                 "( using (?P<base_ami>ami-\w*))?"
-                "( with(?P<version_overrides>( \w*=\S*)*))?")  # Overrides
+                "( with(?P<version_overrides>( \w*=\S*)*))?$")  # Overrides
     def cut_from_edp(self, message, verbose, noop, dest_env, dest_dep,
                      dest_play, source_env, source_dep, source_play, base_ami,
                      version_overrides):
