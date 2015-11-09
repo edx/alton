@@ -123,7 +123,7 @@ class ShowPlugin(WillPlugin):
     def diff_ami_ids(self, message, first_ami, second_ami):
         self._diff_amis(first_ami, second_ami, message)
 
-    @respond_to("^(?P<body>cut\s+ami\s+for.*)")
+    @respond_to("^(?P<body>cut\s+ami.*)")
     def cut_from_edp(self, message, body):
         """
         cut ami for [e-d-p] from [e-d-p] with [var1=version var2=version ...] : Build an AMI for one EDP using the versions from a different EDP with verions overrides
@@ -132,8 +132,9 @@ class ShowPlugin(WillPlugin):
             parsed = self._parse_cut_ami(body)
         except ParseException as e:
             self._say_error('Invalid syntax for "cut ami": ' + repr(e))
+            return
 
-        dest_env, dest_dep, dest_play, source_env, source_dep, source_play, base_ami, version_overrides = (
+        dest_env, dest_dep, dest_play, source_env, source_dep, source_play, base_ami, version_overrides, verbose, noop = (
             parsed['dest_env'], parsed['dest_dep'], parsed['dest_play'], parsed['source_env'], parsed['source_dep'],
             parsed['source_play'], parsed['base_ami'], parsed['version_overrides'], parsed['verbose'], parsed['noop']
         )
@@ -212,8 +213,8 @@ class ShowPlugin(WillPlugin):
                 "from {source_env}-{source_dep}-{source_play}")
             if version_overrides:
                 example_command += (
-                    " with " + version_overrides +
-                    "configuration_secure=master")
+                    " with " + ' '.join('{}={}'.format(k,v) for k,v in version_overrides.items()) +
+                    " configuration_secure=master")
             else:
                 example_command += " with configuration_secure=master"
             example_command = example_command.format(
