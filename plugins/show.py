@@ -11,6 +11,8 @@ from will import settings
 from will.plugin import WillPlugin
 from will.decorators import respond_to
 from boto.exception import EC2ResponseError
+from pyparsing import (Word, Combine, Suppress, OneOrMore, Optional, StringStart,
+    StringEnd, alphanums, Group, Regex, Literal, ParseException)
 
 
 class Versions():
@@ -63,57 +65,6 @@ class ShowPlugin(WillPlugin):
         ami = self._get_ami(ami_id, message=message)
         if ami:
             self.say("/code {}".format(pformat(ami.tags)), message)
-
-    @respond_to("(?P<noop>noop )?cut ami for "  # Initial words
-                "(?P<env>\w*)-(?P<dep>\w*)-(?P<play>\w*)"  # Get the EDP
-                "( from (?P<ami_id>ami-\w*))? "  # Optionally provide an ami
-                "with(?P<versions>( \w*=\S*)*)")  # Override versions
-    def build_ami(self, message, env, dep, play, versions,
-                  ami_id=None, noop=False):
-        # Docstring removed so this does not show up in the help
-        self.say("This version of the command is deprecated. Please use the "
-                 "format 'cut ami for <e-d-c> from "
-                 "<e-d-c> [using ami-???] [with [var=version]...]'",
-                 message=message, color='yellow')
-
-        versions_dict = {}
-        configuration_ref = None
-        configuration_secure_ref = None
-        self.say("Let me get what I need to build the ami...", message)
-
-        if ami_id:
-            # Lookup the AMI and use its settings.
-            self.say("Looking up ami {}".format(ami_id), message)
-            ami_versions = self._get_ami_versions(ami_id, message=message)
-            if not ami_versions:
-                return
-            configuration_ref = ami_versions.configuration
-            configuration_secure_ref = ami_versions.configuration_secure
-            versions_dict = ami_versions.play_versions
-
-        if configuration_ref is None:
-            configuration_ref = "master"
-        if configuration_secure_ref is None:
-            configuration_secure_ref = "master"
-
-        # Override the ami and defaults with the setting from the user
-        for version in versions.split():
-            var, value = version.split('=')
-            if var == 'configuration':
-                configuration_ref = value
-            elif var == 'configuration_secure':
-                configuration_secure_ref = value
-            else:
-                versions_dict[var.lower()] = value
-                versions_dict[var.upper()] = value
-
-        final_versions = Versions(
-            configuration_ref,
-            configuration_secure_ref,
-            versions_dict)
-
-        self._notify_abbey(
-            message, env, dep, play, final_versions, noop, ami_id)
 
     @respond_to("^diff "
                 "(?P<first_env>\w*)-"  # First Environment
@@ -172,23 +123,21 @@ class ShowPlugin(WillPlugin):
     def diff_ami_ids(self, message, first_ami, second_ami):
         self._diff_amis(first_ami, second_ami, message)
 
-    # A regex to build an AMI for one EDP from another EDP.
-    @respond_to("^(?P<verbose>verbose )?(?P<noop>noop )?cut ami for "  # Options
-                "(?P<dest_env>\w*)-"            # Destination Environment
-                "(?P<dest_dep>\w*)-"            # Destination Deployment
-                "(?P<dest_play>\w*) "           # Destination Play(Cluster)
-                "(from )?"                      # from edp optional
-                "((?P<source_env>\w*)-"         # Source Environment
-                "(?P<source_dep>\w*)-"          # Source Deployment
-                "(?P<source_play>\w*))?"        # Source Play(Cluster)
-                "( using (?P<base_ami>ami-\w*))?"
-                "( with(?P<version_overrides>( \w*=\S*)*))?$")  # Overrides
-    def cut_from_edp(self, message, verbose, noop, dest_env, dest_dep,
-                     dest_play, source_env, source_dep, source_play, base_ami,
-                     version_overrides):
+    @respond_to("^(?P<body>cut\s+ami\s+for.*)")
+    def cut_from_edp(self, message, body):
         """
         cut ami for [e-d-p] from [e-d-p] with [var1=version var2=version ...] : Build an AMI for one EDP using the versions from a different EDP with verions overrides
         """
+        try:
+            parsed = self._parse_cut_ami(body)
+        except ParseException as e:
+            self._say_error('Invalid syntax for "cut ami": ' + repr(e))
+
+        dest_env, dest_dep, dest_play, source_env, source_dep, source_play, base_ami, version_overrides = (
+            parsed['dest_env'], parsed['dest_dep'], parsed['dest_play'], parsed['source_env'], parsed['source_dep'],
+            parsed['source_play'], parsed['base_ami'], parsed['version_overrides'], parsed['verbose'], parsed['noop']
+        )
+
         # Get the active source AMI.
         self.say("Let me get what I need to build the ami...", message)
 
@@ -281,6 +230,47 @@ class ShowPlugin(WillPlugin):
 
         self._notify_abbey(message, dest_env, dest_dep, dest_play,
                            final_versions, noop, dest_running_ami, verbose)
+
+    @staticmethod
+    def _parse_cut_ami(text):
+        '''Parse "cut ami" command using pyparsing'''
+
+        #Word == single token
+        token = Word(alphanums + '_')
+
+        #e.g. prod-edx-exdapp. Combining into 1 token enforces lack of whitespace
+        e_d_c = Combine(token('environment') + '-' + token('deployment') + '-' + token('cluster'))
+
+        #e.g. cut ami for prod-edx-edxapp. Subsequent string literals are converted when added to a pyparsing object.
+        for_from = Suppress(Literal('cut') + 'ami' + 'for') + e_d_c('for_edc') + Suppress('from') + e_d_c('from_edc')
+
+        #e.g. with foo=bar bing=baz. Group puts the k=v pairs in sublists instead of flattening them to the top-level token list.
+        with_stmt = Suppress('with') + OneOrMore(Group(token('key') + Suppress('=') + token('value')))('overrides')
+
+        #e.g. using ami-deadbeef
+        using_stmt = Suppress('using') + Regex('ami-[0-9a-f]{8}')('ami_id')
+
+        #0-1 with and using clauses in any order (see Each())
+        modifiers = Optional(with_stmt('with_stmt')) & Optional(using_stmt('using_stmt'))
+
+        #0-1 verbose and noop options in any order (as above)
+        options = Optional(Literal('verbose')('verbose')) & Optional(Literal('noop')('noop'))
+
+        pattern = StringStart() + options + for_from + modifiers + StringEnd()
+
+        parsed = pattern.parseString(text)
+        return {
+            'dest_env':          parsed.for_edc.environment,
+            'dest_dep':          parsed.for_edc.deployment,
+            'dest_play':         parsed.for_edc.cluster,
+            'source_env':        parsed.from_edc.environment,
+            'source_dep':        parsed.from_edc.deployment,
+            'source_play':       parsed.from_edc.cluster,
+            'base_ami':          parsed.using_stmt.ami_id if parsed.using_stmt else None,
+            'version_overrides': {i.key: i.value for i in parsed.with_stmt.overrides} if parsed.with_stmt else None,
+            'verbose':           bool(parsed.verbose),
+            'noop':              bool(parsed.noop),
+        }
 
     def _show_plays(self, message, env, dep):
         logging.info("Getting all plays in {}-{}".format(env, dep))
@@ -493,11 +483,10 @@ class ShowPlugin(WillPlugin):
             url = url.replace(':', '/').replace('git@', 'http://')
         return url
 
-    def _update_from_versions_string(self, defaults, versions_string, message):
+    def _update_from_versions_string(self, defaults, versions, message):
         """Update with any version overrides defined in the versions_string."""
-        if versions_string:
-            for version in versions_string.split():
-                var, value = version.split('=')
+        if versions:
+            for var, value in versions.items():
                 msg = "Overriding '{}' for the new AMI."
                 self.say(msg.format(var), message)
                 if var == 'configuration':

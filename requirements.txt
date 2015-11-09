@@ -7,3 +7,4 @@ qrcode==5.1
 pillow==2.7.0
 simple-crypt==4.0.0
 python-jenkins==0.4.6
+pyparsing==2.0.5
