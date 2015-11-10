@@ -112,7 +112,7 @@ class TestCutFromEdp(unittest.TestCase):
     @mock.patch.object(ShowPlugin, '__init__', return_value=None)   #uses boto
     @mock.patch.object(ShowPlugin, '_ami_for_edp', return_value='ami-00000000') #uses boto
     @mock.patch.object(ShowPlugin, '_notify_abbey')     #this is how we test the result
-    def test_result(self, mocked_notify_abbey, *args):
+    def test_complex_result(self, mocked_notify_abbey, *args):
         message = mock.Mock()
         show_plugin = ShowPlugin()
         body = "verbose noop cut ami for foo-bar-baz from one-two-three using ami-deadbeef with thing=athing bang=abang"
@@ -135,3 +135,23 @@ class TestCutFromEdp(unittest.TestCase):
             [final_versions.configuration, final_versions.configuration_secure,
             final_versions.play_versions, final_versions.repos]
         )
+
+    @mock.patch.object(ShowPlugin, 'say')   #uses hipchat connection
+    @mock.patch.object(ShowPlugin, '__init__', return_value=None)   #uses boto
+    @mock.patch.object(ShowPlugin, '_ami_for_edp', return_value='ami-00000000') #uses boto
+    @mock.patch.object(ShowPlugin, '_get_ami_versions', return_value = Versions(    #uses boto
+        'CONFIG REF', 'CONFIG_SECURE REF', {'thing': 'someotherthing', 'bang': 'someotherbang'},
+        {'thing': {'url': 'THINGURL', 'shorthash': 'THINGSHORTHASH'},
+         'bang':  {'url': 'BANGURL',  'shorthash': 'BANGSHORTHASH'}}
+    ))
+    @mock.patch.object(ShowPlugin, '_notify_abbey')     #this is how we test the result
+    def test_basic_result(self, mocked_notify_abbey, mocked_get_ami_versions, *args):
+        message = mock.Mock()
+        show_plugin = ShowPlugin()
+        body = "cut ami for foo-bar-baz from one-two-three"
+
+        show_plugin.cut_from_edp(message, body)
+        #spec: self._notify_abbey(message, dest_env, dest_dep, dest_play,
+        #    final_versions, noop, dest_running_ami, verbose)
+        mocked_notify_abbey.assert_called_with(message, 'foo', 'bar', 'baz',
+            mocked_get_ami_versions.return_value, False, 'ami-00000000', False)
