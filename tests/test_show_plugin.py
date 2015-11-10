@@ -1,6 +1,6 @@
-# To run these, go to the `plugins` directory and run `python -m unittest discover`
+# To run these, run `python -m unittest discover` from the top of the repo
 
-from show import *
+from plugins.show import *
 from pyparsing import ParseException
 import unittest, mock
 
