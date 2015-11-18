@@ -9,6 +9,19 @@ class HelloPlugin(WillPlugin):
     def hello(self, message):
         self.reply(message, "hello everyone in {}!".format(self.get_room_from_message(message)['name']))
 
+    @respond_to("^hi$")
+    def hello(self, message):
+        self.reply(message, "hi {}!".format(message.sender.nick))
+
+    @respond_to("^ping$")
+    def hello(self, message):
+        self.reply(message, "PONG")
+
+    @respond_to("^pong$")
+    def hello(self, message):
+        self.reply(message, "PING")
+
+
     @respond_to("^tell (?P<channel>\w+) (?P<what>.*)")
     def tell(self, message, channel, what):
         self.reply(message, "OK!")
