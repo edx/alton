@@ -4,3 +4,5 @@ shelf.db
 *.swp
 start_alton.sh
 ENV
+redis.conf
+dump.rdb
