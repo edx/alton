@@ -12,7 +12,7 @@ from will.plugin import WillPlugin
 from will.decorators import respond_to
 from boto.exception import EC2ResponseError
 from pyparsing import (Word, Combine, Suppress, OneOrMore, Optional, StringStart,
-    StringEnd, alphanums, Group, Regex, Literal, ParseException)
+    StringEnd, alphanums, printables, Group, Regex, Literal, ParseException)
 
 
 class Versions():
@@ -129,6 +129,7 @@ class ShowPlugin(WillPlugin):
         cut ami for [e-d-p] from [e-d-p] with [var1=version var2=version ...] : Build an AMI for one EDP using the versions from a different EDP with verions overrides
         """
         try:
+            logging.info('Parsing: "{}"'.format(body))
             parsed = self._parse_cut_ami(body)
         except ParseException as e:
             self._say_error('Invalid syntax for "cut ami": ' + repr(e))
@@ -237,16 +238,17 @@ class ShowPlugin(WillPlugin):
         '''Parse "cut ami" command using pyparsing'''
 
         #Word == single token
-        token = Word(alphanums + '_')
+        edctoken = Word(alphanums + '_')
+        withtoken = Word(printables.replace('=', ''))
 
         #e.g. prod-edx-exdapp. Combining into 1 token enforces lack of whitespace
-        e_d_c = Combine(token('environment') + '-' + token('deployment') + '-' + token('cluster'))
+        e_d_c = Combine(edctoken('environment') + '-' + edctoken('deployment') + '-' + edctoken('cluster'))
 
         #e.g. cut ami for prod-edx-edxapp. Subsequent string literals are converted when added to a pyparsing object.
         for_from = Suppress(Literal('cut') + 'ami' + 'for') + e_d_c('for_edc') + Suppress('from') + e_d_c('from_edc')
 
         #e.g. with foo=bar bing=baz. Group puts the k=v pairs in sublists instead of flattening them to the top-level token list.
-        with_stmt = Suppress('with') + OneOrMore(Group(token('key') + Suppress('=') + token('value')))('overrides')
+        with_stmt = Suppress('with') + OneOrMore(Group(withtoken('key') + Suppress('=') + withtoken('value')))('overrides')
 
         #e.g. using ami-deadbeef
         using_stmt = Suppress('using') + Regex('ami-[0-9a-f]{8}')('ami_id')
