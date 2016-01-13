@@ -132,7 +132,8 @@ class ShowPlugin(WillPlugin):
             logging.info('Parsing: "{}"'.format(body))
             parsed = self._parse_cut_ami(body)
         except ParseException as e:
-            self._say_error('Invalid syntax for "cut ami": ' + repr(e))
+            logging.info('Failed to parse cut-ami statement "{}": {}'.format(body, repr(e)))
+            self._say_error('Invalid syntax for "cut ami": ' + repr(e), message=message)
             return
 
         dest_env, dest_dep, dest_play, source_env, source_dep, source_play, base_ami, version_overrides, verbose, noop = (
