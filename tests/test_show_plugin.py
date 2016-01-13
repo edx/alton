@@ -18,6 +18,8 @@ class TestParseCutAmi(unittest.TestCase):
          'msg' : 'multiple overrides in "with" statement failed'},
         {'text': 'cut ami for foo-bar-baz from one-two-three with foo =bar bing= baz',
          'msg' : 'using spaces in "with" statement overrides should be permitted'},
+        {'text': 'cut ami for foo-bar-baz from one-two-three with foo=my/branch-name',
+         'msg' : 'special characters should be allowed in variable overrides'},
         {'text': 'cut ami for prod-edx-programs from stage-edx-programs using ami-deadbeef with configuration=master configuration_secure=master programs_version=master',
          'msg' : '''using both "using" and "with" statements failed or they're not order-independent'''},
         {'text': 'cut ami for prod-edx-programs from stage-edx-programs with configuration=master configuration_secure=master programs_version=master using ami-deadbeef',
