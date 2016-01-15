@@ -126,7 +126,7 @@ class ShowPlugin(WillPlugin):
     @respond_to("^(?P<body>cut\s+ami.*)")
     def cut_from_edp(self, message, body):
         """
-        cut ami for [e-d-p] from [e-d-p] with [var1=version var2=version ...] : Build an AMI for one EDP using the versions from a different EDP with verions overrides
+        cut ami [noop] [verbose] for <e-d-c> from <e-d-c> [with <var1>=<value> <var2>=<version> ...] [using <ami-id>] : Build an AMI for one EDC using the versions from a different EDC with verions overrides
         """
         try:
             logging.info('Parsing: "{}"'.format(body))
@@ -242,11 +242,13 @@ class ShowPlugin(WillPlugin):
         edctoken = Word(alphanums + '_')
         withtoken = Word(printables.replace('=', ''))
 
+        preamble = Suppress(Literal('cut') + 'ami')
+
         #e.g. prod-edx-exdapp. Combining into 1 token enforces lack of whitespace
         e_d_c = Combine(edctoken('environment') + '-' + edctoken('deployment') + '-' + edctoken('cluster'))
 
         #e.g. cut ami for prod-edx-edxapp. Subsequent string literals are converted when added to a pyparsing object.
-        for_from = Suppress(Literal('cut') + 'ami' + 'for') + e_d_c('for_edc') + Suppress('from') + e_d_c('from_edc')
+        for_from = Suppress('for') + e_d_c('for_edc') + Suppress('from') + e_d_c('from_edc')
 
         #e.g. with foo=bar bing=baz. Group puts the k=v pairs in sublists instead of flattening them to the top-level token list.
         with_stmt = Suppress('with') + OneOrMore(Group(withtoken('key') + Suppress('=') + withtoken('value')))('overrides')
@@ -260,7 +262,7 @@ class ShowPlugin(WillPlugin):
         #0-1 verbose and noop options in any order (as above)
         options = Optional(Literal('verbose')('verbose')) & Optional(Literal('noop')('noop'))
 
-        pattern = StringStart() + options + for_from + modifiers + StringEnd()
+        pattern = StringStart() + preamble + options + for_from + modifiers + StringEnd()
 
         parsed = pattern.parseString(text)
         return {
