@@ -24,13 +24,13 @@ class TestParseCutAmi(unittest.TestCase):
          'msg' : '''using both "using" and "with" statements failed or they're not order-independent'''},
         {'text': 'cut ami for prod-edx-programs from stage-edx-programs with configuration=master configuration_secure=master programs_version=master using ami-deadbeef',
          'msg' : '''using both "using" and "with" statements failed or they're not order-independent'''},
-        {'text': 'verbose cut ami for prod-edx-programs from stage-edx-programs',
+        {'text': 'cut ami verbose for prod-edx-programs from stage-edx-programs',
          'msg' : '"verbose" option failed'},
-        {'text': 'noop cut ami for prod-edx-programs from stage-edx-programs',
+        {'text': 'cut ami noop for prod-edx-programs from stage-edx-programs',
          'msg' : '"noop" option failed'},
-        {'text': 'noop verbose cut ami for prod-edx-programs from stage-edx-programs',
+        {'text': 'cut ami noop verbose for prod-edx-programs from stage-edx-programs',
          'msg' : '''using both "noop" and "verbose" options failed or they're not order-independent'''},
-        {'text': 'verbose noop cut ami for prod-edx-programs from stage-edx-programs',
+        {'text': 'cut ami verbose noop for prod-edx-programs from stage-edx-programs',
          'msg' : '''using both "noop" and "verbose" options failed or they're not order-independent'''},
     ]
 
@@ -88,7 +88,7 @@ class TestParseCutAmi(unittest.TestCase):
         })
 
     def test_all_properties(self):
-        text = "verbose noop cut ami for foo-bar-baz from one-two-three using ami-deadbeef with thing=athing bang=abang"
+        text = "cut ami verbose noop for foo-bar-baz from one-two-three using ami-deadbeef with thing=athing bang=abang"
         result = ShowPlugin._parse_cut_ami(text)
         self.assertEqual(result, {
             'dest_env':          'foo',
@@ -117,7 +117,7 @@ class TestCutFromEdp(unittest.TestCase):
     def test_complex_result(self, mocked_notify_abbey, *args):
         message = mock.Mock()
         show_plugin = ShowPlugin()
-        body = "verbose noop cut ami for foo-bar-baz from one-two-three using ami-deadbeef with thing=athing bang=abang"
+        body = "cut ami verbose noop for foo-bar-baz from one-two-three using ami-deadbeef with thing=athing bang=abang"
         final_versions = Versions(
             'CONFIG REF', 'CONFIG_SECURE REF',
             {'THING': 'athing', 'thing': 'athing', 'BANG': 'abang', 'bang': 'abang'},
