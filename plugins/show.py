@@ -356,6 +356,10 @@ class ShowPlugin(WillPlugin):
         }
         instances = ec2.get_all_instances(filters=edp_filter)
 
+        if not instances:
+            self.say('No instances found. The input may be misspelled.', color='red')
+            return
+
         output_table = [
             ["Internal DNS", "Versions", "ELBs", "AMI"],
             ["------------", "--------", "----", "---"],
