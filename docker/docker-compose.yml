@@ -17,6 +17,10 @@ services:
       - WILL_V2_TOKEN=my_hipchat_v2_token
       - WILL_REDIS_URL=redis://local:@redis:6379
       - WILL_ROOMS=room1;room2;room3
+      - WILL_PIPELINE_BUCKET_NAME=my-pipeline-metadata-bucket
+      - WILL_GOCD_USERNAME=test_gocd_user
+      - WILL_GOCD_PASSWORD=test_gocd_password
+      - WILL_GOCD_SERVER_URL=https://gocd.test.edx.org
 
   redis:
     image: redis

@@ -5,3 +5,4 @@ ipython==4.0.3
 python-jenkins==0.4.14
 pyparsing==2.0.7
 pytz==2017.2
+yagocd==0.4.4

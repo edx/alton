@@ -61,7 +61,7 @@ class ShowPlugin(WillPlugin):
     @respond_to(r"^show (?P<deployment>\w*) (?P<ami_id>ami-\w*)")
     def show_ami_deprecated(self, message, deployment, ami_id):  # pylint: disable=unused-argument
         """
-        (Depecated) Show AMI.
+        show [deployment] [ami_id]: (DEPRECATED) show AMI.
         """
         self.say("This version of the command is deprecated. Please use the "
                  "format 'show {ami_id}'".format(ami_id=ami_id),
@@ -353,7 +353,7 @@ class ShowPlugin(WillPlugin):
         for reservation in reservations:
             for instance in reservation.instances:
                 elbs = self._instance_elbs(instance.id, dep, all_elbs)
-                if instance.state == 'running' and len(list(elbs)) > 0:
+                if instance.state == 'running' and len(list(elbs)) > 0:  # pylint: disable=len-as-condition
                     amis.add(instance.image_id)
 
         if len(amis) > 1:
@@ -364,7 +364,7 @@ class ShowPlugin(WillPlugin):
             self.say(msg, message, color='red')
             return None
 
-        if len(amis) == 0:
+        if len(amis) == 0:  # pylint: disable=len-as-condition
             msg = "No AMIs found for {}-{}-{}."
             msg = msg.format(env, dep, play)
             self.say(msg, message, color='red')
@@ -432,10 +432,10 @@ class ShowPlugin(WillPlugin):
                     refs, elbs, [ami_id],
                     fillvalue="",
                 )
-                for instance, ref, elb, ami in all_data:
-                    output_table.append([instance, ref, elb, ami])
-                    if instance:
-                        instance_len = max(instance_len, len(instance))
+                for inst, ref, elb, ami in all_data:
+                    output_table.append([inst, ref, elb, ami])
+                    if inst:
+                        instance_len = max(instance_len, len(inst))
 
                     if ref:
                         ref_len = max(ref_len, len(ref))
