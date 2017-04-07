@@ -1,0 +1,7 @@
+"""Setup for tubular"""
+from setuptools import setup
+
+setup(
+    setup_requires=[u'pbr>=1.9', u'setuptools>=17.1'],
+    pbr=True,
+)

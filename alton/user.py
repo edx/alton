@@ -1,16 +1,21 @@
-from will import settings
-from will.decorators import rendered_template
-import pyotp
-import qrcode
+"""
+User representation.
+"""
 import base64
-import boto
-import boto.s3.connection
-from boto.s3.key import Key
 import cStringIO
 import datetime
 import urlparse
 from simplecrypt import encrypt, decrypt
 import pytz
+import pyotp
+import qrcode
+import boto
+import boto.s3.connection
+from boto.s3.key import Key
+from will import settings
+from will.decorators import rendered_template
+
+# pylint: disable=line-too-long
 
 
 def requires_permission(permission):
@@ -25,7 +30,13 @@ def requires_permission(permission):
             self.reply(message, "Hello!")
     """
     def decorator_check_permission(func):
+        """
+        Decorator which checks permissions.
+        """
         def process_response(plugin, message, *args, **kwargs):
+            """
+            Process the response.
+            """
             if check_permission(plugin, message, permission):
                 return func(plugin, message, *args, **kwargs)
 
@@ -35,7 +46,7 @@ def requires_permission(permission):
 
 
 def check_permission(plugin, message, permission):
-    """
+    r"""
     Ensure the user sending the message is authenticated and authorized to perform the action.
 
     This can be used to check permissions that are scoped to a particular entity. For example you might grant a
@@ -137,13 +148,13 @@ class User(object):
         """The user's timezone as a pytz.timezone()"""
         if not hasattr(self, '_timezone'):
             full_user_info = self.plugin.get_hipchat_user(self.hipchat_id)
-            self._timezone = pytz.timezone(full_user_info['timezone'])
+            self._timezone = pytz.timezone(full_user_info['timezone'])  # pylint: disable=attribute-defined-outside-init
 
         return self._timezone
 
-    def localize_time(self, dt):
+    def localize_time(self, dtm):
         """Given a datetime object, localize it in the user's timezone"""
-        return dt.astimezone(self.timezone)
+        return dtm.astimezone(self.timezone)
 
     @property
     def session_expiration_time(self):
@@ -166,7 +177,7 @@ class User(object):
         Note this encrypts the secure token before storing it externally.
         """
         as_dict = {
-            'token': encrypt(settings.TWOFACTOR_SECRET, self.token),
+            'token': encrypt(settings.TWOFACTOR_SECRET, self.token),  # pylint: disable=no-member
             'permissions': self.permissions,
         }
         if self.verified_time:
@@ -183,7 +194,7 @@ class User(object):
 
         This URL can be accessed for by anyone who has it (for a period of time), so it should be handled with care.
         """
-        s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET
+        s3_twofactor_bucket = settings.TWOFACTOR_S3_BUCKET  # pylint: disable=no-member
         s3_twofactor_path_prefix = ''
         parsed_url = urlparse.urlparse(s3_twofactor_bucket)
         if parsed_url.scheme == 's3':
@@ -237,7 +248,7 @@ class User(object):
         hipchat_id = user_metadata['hipchat_id']
         as_dict = plugin.load(User.get_key(hipchat_id))
         if as_dict:
-            decrypted_token = decrypt(settings.TWOFACTOR_SECRET, as_dict['token'])
+            decrypted_token = decrypt(settings.TWOFACTOR_SECRET, as_dict['token'])  # pylint: disable=no-member
             return User(plugin, user_metadata, decrypted_token, as_dict['permissions'], as_dict.get('verified_time'))
         else:
             return None
@@ -246,7 +257,7 @@ class User(object):
     def get_from_nick(plugin, nick):
         """Retrieve a user given a nick, returns None if the user has never setup two-factor authentication"""
         user_metadata = None
-        for jid, info in plugin.internal_roster.items():
+        for __, info in plugin.internal_roster.items():
             if info["nick"] == nick:
                 user_metadata = info
                 break
@@ -279,7 +290,7 @@ class User(object):
     def list(plugin):
         """Get a list of all users"""
         users_by_id = {}
-        for jid, info in plugin.internal_roster.items():
+        for __, info in plugin.internal_roster.items():
             users_by_id[info['hipchat_id']] = info
 
         users = []

@@ -1,22 +1,28 @@
-import boto
+"""
+Show AWS data plugin
+"""
 import logging
-import yaml
-import requests
 import time
-import jenkins
 import urllib2
 from itertools import izip_longest
 from pprint import pformat
+import jenkins
+import yaml
 from will import settings
 from will.plugin import WillPlugin
 from will.decorators import respond_to
+import boto
 from boto.exception import EC2ResponseError
-from pyparsing import (Word, Combine, Suppress, OneOrMore, Optional, StringStart,
-    StringEnd, alphanums, printables, Group, Regex, Literal, ParseException)
+from pyparsing import (
+    Word, Combine, Suppress, OneOrMore, Optional, StringStart,
+    StringEnd, alphanums, printables, Group, Regex, Literal, ParseException
+)
 
 
-class Versions():
-
+class Versions(object):
+    """
+    Encapsulates versions associated with an AMI.
+    """
     def __init__(self, configuration_ref, configuration_secure_ref, versions,
                  repos=None):
         """
@@ -31,15 +37,17 @@ class Versions():
 
 
 class ShowPlugin(WillPlugin):
-
+    """
+    Show plugin.
+    """
     def __init__(self):
         if not hasattr(settings, "BOTO_PROFILES"):
             msg = "Error: BOTO_PROFILES not defined in the environment"
             self._say_error(msg)
-        self.aws_profiles = settings.BOTO_PROFILES.split(";")
+        self.aws_profiles = settings.BOTO_PROFILES.split(";")  # pylint: disable=no-member
 
-    @respond_to("^show (?!ami-)"  # Negative lookahead to exclude ami strings
-                "(?P<env>\w*)(-(?P<dep>\w*))(-(?P<play>\w*))?")
+    @respond_to(r"^show (?!ami-)"  # Negative lookahead to exclude ami strings
+                r"(?P<env>\w*)(-(?P<dep>\w*))(-(?P<play>\w*))?")
     def show(self, message, env, dep, play):
         """
         show [e-d-p]: show the instances in a VPC cluster
@@ -50,13 +58,16 @@ class ShowPlugin(WillPlugin):
         else:
             self._show_edp(message, env, dep, play)
 
-    @respond_to("^show (?P<deployment>\w*) (?P<ami_id>ami-\w*)")
-    def show_ami_deprecated(self, message, deployment, ami_id):
+    @respond_to(r"^show (?P<deployment>\w*) (?P<ami_id>ami-\w*)")
+    def show_ami_deprecated(self, message, deployment, ami_id):  # pylint: disable=unused-argument
+        """
+        (Depecated) Show AMI.
+        """
         self.say("This version of the command is deprecated. Please use the "
                  "format 'show {ami_id}'".format(ami_id=ami_id),
                  message=message, color='yellow')
 
-    @respond_to("^show (?P<ami_id>ami-\w*)")
+    @respond_to(r"^show (?P<ami_id>ami-\w*)")
     def show_ami(self, message, ami_id):
         """
         show [ami_id]: show tags for the ami
@@ -66,14 +77,14 @@ class ShowPlugin(WillPlugin):
         if ami:
             self.say("/code {}".format(pformat(ami.tags)), message)
 
-    @respond_to("^diff "
-                "(?P<first_env>\w*)-"  # First Environment
-                "(?P<first_dep>\w*)-"  # First Deployment
-                "(?P<first_play>\w*)"  # First Play(Cluster)
-                " "
-                "(?P<second_env>\w*)-"  # Second Environment
-                "(?P<second_dep>\w*)-"  # Second Deployment
-                "(?P<second_play>\w*)")  # Second Play(Cluster)
+    @respond_to(r"^diff "
+                r"(?P<first_env>\w*)-"  # First Environment
+                r"(?P<first_dep>\w*)-"  # First Deployment
+                r"(?P<first_play>\w*)"  # First Play(Cluster)
+                r" "
+                r"(?P<second_env>\w*)-"  # Second Environment
+                r"(?P<second_dep>\w*)-"  # Second Deployment
+                r"(?P<second_play>\w*)")  # Second Play(Cluster)
     def diff_edps(self, message, first_env, first_dep, first_play,
                   second_env, second_dep, second_play):
         """
@@ -86,12 +97,12 @@ class ShowPlugin(WillPlugin):
 
         self._diff_amis(first_ami, second_ami, message)
 
-    @respond_to("^diff "
-                "(?P<first_env>\w*)-"  # First Environment
-                "(?P<first_dep>\w*)-"  # First Deployment
-                "(?P<first_play>\w*)"  # First Play(Cluster)
-                " "
-                "(?P<second_ami>ami-\w*)")  # AMI
+    @respond_to(r"^diff "
+                r"(?P<first_env>\w*)-"  # First Environment
+                r"(?P<first_dep>\w*)-"  # First Deployment
+                r"(?P<first_play>\w*)"  # First Play(Cluster)
+                r" "
+                r"(?P<second_ami>ami-\w*)")  # AMI
     def diff_edp_ami_id(self, message, first_env, first_dep, first_play,
                         second_ami):
         """
@@ -101,12 +112,12 @@ class ShowPlugin(WillPlugin):
             message, first_env, first_dep, first_play)
         self._diff_amis(first_ami, second_ami, message)
 
-    @respond_to("^diff "
-                "(?P<first_ami>ami-\w*)"  # AMI
-                " "
-                "(?P<second_env>\w*)-"  # Second Environment
-                "(?P<second_dep>\w*)-"  # Second Deployment
-                "(?P<second_play>\w*)")  # Second Play(Cluster)
+    @respond_to(r"^diff "
+                r"(?P<first_ami>ami-\w*)"  # AMI
+                r" "
+                r"(?P<second_env>\w*)-"  # Second Environment
+                r"(?P<second_dep>\w*)-"  # Second Deployment
+                r"(?P<second_play>\w*)")  # Second Play(Cluster)
     def diff_ami_id_edp(self, message, first_ami,
                         second_env, second_dep, second_play):
         """
@@ -116,29 +127,36 @@ class ShowPlugin(WillPlugin):
             message, second_env, second_dep, second_play)
         self._diff_amis(first_ami, second_ami, message)
 
-    @respond_to("^diff "
-                "(?P<first_ami>ami-\w*)"
-                " "
-                "(?P<second_ami>ami-\w*)")
+    @respond_to(r"^diff "
+                r"(?P<first_ami>ami-\w*)"
+                r" "
+                r"(?P<second_ami>ami-\w*)")
     def diff_ami_ids(self, message, first_ami, second_ami):
+        """
+        diff [ami-id1] [ami-id2] : Show the difference between two AMIs
+        """
         self._diff_amis(first_ami, second_ami, message)
 
-    @respond_to("^(?P<body>cut\s+ami.*)")
+    @respond_to(r"^(?P<body>cut\s+ami.*)")
     def cut_from_edp(self, message, body):
         """
-        cut ami [noop] [verbose] for <e-d-c> from <e-d-c> [with <var1>=<value> <var2>=<version> ...] [using <ami-id>] : Build an AMI for one EDC using the versions from a different EDC with verions overrides
+        cut ami [noop] [verbose] for <e-d-c> from <e-d-c> [with <var1>=<value> <var2>=<version> ...] [using <ami-id>] :
+            Build an AMI for one EDC using the versions from a different EDC with verions overrides
         """
         try:
             logging.info('Parsing: "{}"'.format(body))
             parsed = self._parse_cut_ami(body)
-        except ParseException as e:
-            logging.info('Failed to parse cut-ami statement "{}": {}'.format(body, repr(e)))
-            self._say_error('Invalid syntax for "cut ami": ' + repr(e), message=message)
+        except ParseException as exc:
+            logging.info('Failed to parse cut-ami statement "{}": {}'.format(body, repr(exc)))
+            self._say_error('Invalid syntax for "cut ami": ' + repr(exc), message=message)
             return
 
-        dest_env, dest_dep, dest_play, source_env, source_dep, source_play, base_ami, version_overrides, verbose, noop = (
-            parsed['dest_env'], parsed['dest_dep'], parsed['dest_play'], parsed['source_env'], parsed['source_dep'],
-            parsed['source_play'], parsed['base_ami'], parsed['version_overrides'], parsed['verbose'], parsed['noop']
+        dest_env, dest_dep, dest_play, source_env, source_dep, source_play = (
+            parsed['dest_env'], parsed['dest_dep'], parsed['dest_play'],
+            parsed['source_env'], parsed['source_dep'], parsed['source_play']
+        )
+        base_ami, version_overrides, verbose, noop = (
+            parsed['base_ami'], parsed['version_overrides'], parsed['verbose'], parsed['noop']
         )
 
         # Get the active source AMI.
@@ -178,11 +196,10 @@ class ShowPlugin(WillPlugin):
         final_versions = self._update_from_versions_string(
             source_versions, version_overrides, message)
 
-        # When building accross deployments and not overriding
-        # configuration_secure.
-        if dest_dep != source_dep \
-           and (version_overrides is None
-                or "configuration_secure" not in version_overrides):
+        # When building across deployments and not overriding configuration_secure.
+        if dest_dep != source_dep and (
+                version_overrides is None or "configuration_secure" not in version_overrides
+        ):
 
             dest_versions = self._get_ami_versions(dest_running_ami,
                                                    message=message)
@@ -215,7 +232,7 @@ class ShowPlugin(WillPlugin):
                 "from {source_env}-{source_dep}-{source_play}")
             if version_overrides:
                 example_command += (
-                    " with " + ' '.join('{}={}'.format(k,v) for k,v in version_overrides.items()) +
+                    " with " + ' '.join('{}={}'.format(k, v) for k, v in version_overrides.items()) +
                     " configuration_secure=master")
             else:
                 example_command += " with configuration_secure=master"
@@ -236,49 +253,54 @@ class ShowPlugin(WillPlugin):
 
     @staticmethod
     def _parse_cut_ami(text):
-        '''Parse "cut ami" command using pyparsing'''
+        """Parse "cut ami" command using pyparsing"""
 
-        #Word == single token
+        # Word == single token
         edctoken = Word(alphanums + '_')
         withtoken = Word(printables.replace('=', ''))
 
         preamble = Suppress(Literal('cut') + 'ami')
 
-        #e.g. prod-edx-exdapp. Combining into 1 token enforces lack of whitespace
+        # e.g. prod-edx-exdapp. Combining into 1 token enforces lack of whitespace
         e_d_c = Combine(edctoken('environment') + '-' + edctoken('deployment') + '-' + edctoken('cluster'))
 
-        #e.g. cut ami for prod-edx-edxapp. Subsequent string literals are converted when added to a pyparsing object.
+        # e.g. cut ami for prod-edx-edxapp. Subsequent string literals are converted when added to a pyparsing object.
         for_from = Suppress('for') + e_d_c('for_edc') + Suppress('from') + e_d_c('from_edc')
 
-        #e.g. with foo=bar bing=baz. Group puts the k=v pairs in sublists instead of flattening them to the top-level token list.
-        with_stmt = Suppress('with') + OneOrMore(Group(withtoken('key') + Suppress('=') + withtoken('value')))('overrides')
+        # e.g. with foo=bar bing=baz.
+        # Group puts the k=v pairs in sublists instead of flattening them to the top-level token list.
+        with_stmt = Suppress('with')
+        with_stmt += OneOrMore(Group(withtoken('key') + Suppress('=') + withtoken('value')))('overrides')
 
-        #e.g. using ami-deadbeef
+        # e.g. using ami-deadbeef
         using_stmt = Suppress('using') + Regex('ami-[0-9a-f]{8}')('ami_id')
 
-        #0-1 with and using clauses in any order (see Each())
+        # 0-1 with and using clauses in any order (see Each())
         modifiers = Optional(with_stmt('with_stmt')) & Optional(using_stmt('using_stmt'))
 
-        #0-1 verbose and noop options in any order (as above)
+        # 0-1 verbose and noop options in any order (as above)
         options = Optional(Literal('verbose')('verbose')) & Optional(Literal('noop')('noop'))
 
         pattern = StringStart() + preamble + options + for_from + modifiers + StringEnd()
 
         parsed = pattern.parseString(text)
         return {
-            'dest_env':          parsed.for_edc.environment,
-            'dest_dep':          parsed.for_edc.deployment,
-            'dest_play':         parsed.for_edc.cluster,
-            'source_env':        parsed.from_edc.environment,
-            'source_dep':        parsed.from_edc.deployment,
-            'source_play':       parsed.from_edc.cluster,
-            'base_ami':          parsed.using_stmt.ami_id if parsed.using_stmt else None,
+            'dest_env': parsed.for_edc.environment,
+            'dest_dep': parsed.for_edc.deployment,
+            'dest_play': parsed.for_edc.cluster,
+            'source_env': parsed.from_edc.environment,
+            'source_dep': parsed.from_edc.deployment,
+            'source_play': parsed.from_edc.cluster,
+            'base_ami': parsed.using_stmt.ami_id if parsed.using_stmt else None,
             'version_overrides': {i.key: i.value for i in parsed.with_stmt.overrides} if parsed.with_stmt else None,
-            'verbose':           bool(parsed.verbose),
-            'noop':              bool(parsed.noop),
+            'verbose': bool(parsed.verbose),
+            'noop': bool(parsed.noop),
         }
 
     def _show_plays(self, message, env, dep):
+        """
+        Gets all plays in an environment-deployment.
+        """
         logging.info("Getting all plays in {}-{}".format(env, dep))
         ec2 = boto.connect_ec2(profile_name=dep)
 
@@ -301,18 +323,22 @@ class ShowPlugin(WillPlugin):
         self.say("/code {}".format("\n".join(output)), message)
 
     def _instance_elbs(self, instance_id, profile_name=None, elbs=None):
-
+        """
+        Generator returning all ELBs.
+        """
         if elbs is None:
             elb = boto.connect_elb(profile_name=profile_name)
             elbs = elb.get_all_load_balancers()
 
-        for lb in elbs:
-            lb_instance_ids = [inst.id for inst in lb.instances]
+        for elb in elbs:
+            lb_instance_ids = [inst.id for inst in elb.instances]
             if instance_id in lb_instance_ids:
-                yield lb
+                yield elb
 
     def _ami_for_edp(self, message, env, dep, play):
-
+        """
+        Given an EDP, return its active AMI.
+        """
         ec2 = boto.connect_ec2(profile_name=dep)
         elb = boto.connect_elb(profile_name=dep)
         all_elbs = elb.get_all_load_balancers()
@@ -347,6 +373,9 @@ class ShowPlugin(WillPlugin):
         return amis.pop()
 
     def _show_edp(self, message, env, dep, play):
+        """
+        Show info about a particular EDP.
+        """
         self.say("Reticulating splines...", message)
         ec2 = boto.connect_ec2(profile_name=dep)
         edp_filter = {
@@ -390,7 +419,11 @@ class ShowPlugin(WillPlugin):
                             refs.append(
                                 "{}_version={}".format(key, value.split()[1]))
 
-                instance_name = lambda x: x.name
+                def instance_name(instance):
+                    """
+                    Return name of the instance.
+                    """
+                    return instance.name
                 elbs = map(instance_name,
                            self._instance_elbs(instance.id, dep))
 
@@ -424,6 +457,9 @@ class ShowPlugin(WillPlugin):
         self.say("/code {}".format("\n".join(output)), message)
 
     def _get_ami_versions(self, ami_id, message=None):
+        """
+        Given an AMI, return the associated repo versions.
+        """
         versions_dict = {}
         ami = self._get_ami(ami_id, message=message)
         if not ami:
@@ -452,13 +488,17 @@ class ShowPlugin(WillPlugin):
                     versions_dict[key.lower()] = shorthash
                     versions_dict[key.upper()] = shorthash
 
-        return Versions(configuration_ref,
-                        configuration_secure_ref,
-                        versions_dict,
-                        repos,
-                        )
+        return Versions(
+            configuration_ref,
+            configuration_secure_ref,
+            versions_dict,
+            repos,
+        )
 
     def _diff_url_from(self, first_data, second_data):
+        """
+        Diff repo URLs.
+        """
         if first_data['url'] != second_data['url']:
             msg = "clusters use different repos for this: {} vs {}".format(
                 self._hash_url_from(first_data),
@@ -478,6 +518,9 @@ class ShowPlugin(WillPlugin):
         return url
 
     def _hash_url_from(self, repo_data):
+        """
+        Get the hash url from a repo.
+        """
         url = "{}/tree/{}".format(
             self._web_url_from(repo_data),
             repo_data['shorthash']
@@ -485,6 +528,9 @@ class ShowPlugin(WillPlugin):
         return url
 
     def _web_url_from(self, repo_data):
+        """
+        Get the web url from a repo.
+        """
         url = repo_data['url']
         # for both git and http links remove .git
         # so that /compare links work
@@ -510,8 +556,14 @@ class ShowPlugin(WillPlugin):
 
     def _notify_abbey(self, message, env, dep, play, versions,
                       noop=False, ami_id=None, verbose=False):
-
-        if not (hasattr(settings, 'JENKINS_URL') or hasattr(settings, 'JENKINS_API_KEY') or hasattr(settings, 'JENKINS_API_USER')):
+        """
+        Interface with Abbey, where AMIs are built.
+        """
+        if not (
+                hasattr(settings, 'JENKINS_URL') or
+                hasattr(settings, 'JENKINS_API_KEY') or
+                hasattr(settings, 'JENKINS_API_USER')
+        ):
             msg = "The JENKINS_URL and JENKINS_API_KEY environment setting needs " \
                   "to be set so I can build AMIs."
             self.say(msg, message, color='red')
@@ -529,7 +581,7 @@ class ShowPlugin(WillPlugin):
             params['configuration'] = versions.configuration
             params['configuration_secure'] = versions.configuration_secure
             params['jobid'] = '{}-{}-{}-{}-{}'.format(message.sender.nick, env, dep, play, int(time.time()))
-            params['callback_url'] = settings.NOTIFY_CALLBACK_URL
+            params['callback_url'] = settings.NOTIFY_CALLBACK_URL  # pylint: disable=no-member
 
             channel = self.get_room_from_message(message)['name']
             notification_list = {}
@@ -557,17 +609,25 @@ class ShowPlugin(WillPlugin):
             if noop:
                 self.say("would have requested: {}".format(params), message)
             else:
-                j = jenkins.Jenkins(settings.JENKINS_URL, settings.JENKINS_API_USER, settings.JENKINS_API_KEY)
+                j = jenkins.Jenkins(
+                    settings.JENKINS_URL, settings.JENKINS_API_USER, settings.JENKINS_API_KEY  # pylint: disable=no-member
+                )
                 jenkins_job_id = j.get_job_info('build-ami')['nextBuildNumber']
-                self.say("starting job 'build-ami' Job number {}, build token {}".format(jenkins_job_id, params['jobid']), message) 
+                self.say(
+                    "starting job 'build-ami' Job number {}, build token {}".format(
+                        jenkins_job_id, params['jobid']
+                    ), message
+                )
                 try:
                     j.build_job('build-ami', parameters=params)
-                except urllib2.HTTPError as e:
-                    self.say("Sent request got {}: {}".format(e.code, e.reason),
+                except urllib2.HTTPError as exc:
+                    self.say("Sent request got {}: {}".format(exc.code, exc.reason),
                              message, color='red')
 
     def _diff_amis(self, first_ami, second_ami, message):
-
+        """
+        Diff two AMIs to see repo differences.
+        """
         first_ami_versions = self._get_ami_versions(first_ami, message=message)
         second_ami_versions = self._get_ami_versions(second_ami,
                                                      message=message)

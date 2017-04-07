@@ -1,29 +1,30 @@
+"""
+Settings for the Alton WillBot.
+"""
 # Welcome to Will's settings.
-# 
+#
 
 # Config and the environment:
 # ---------------------------
 # Will can use settings from the environment or this file, and sets reasonable defaults.
-# 
-# Best practices: set keys and the like in the environment, and anything you'd be ok 
+#
+# Best practices: set keys and the like in the environment, and anything you'd be ok
 # with other people knowing in this file.
-# 
-# To specify in the environment, just prefix with WILL_ 
-# (i.e. WILL_DEFAULT_ROOM becomes DEFAULT_ROOM).  
+#
+# To specify in the environment, just prefix with WILL_
+# (i.e. WILL_DEFAULT_ROOM becomes DEFAULT_ROOM).
 # In case of conflict, you will see a warning message, and the value in this file will win.
-
-
 
 # ------------------------------------------------------------------------------------
 # Required settings
 # ------------------------------------------------------------------------------------
 
-# The list of plugin modules will should load. 
+# The list of plugin modules will should load.
 # Will recursively loads all plugins contained in each module.
 
 
 # This list can contain:
-# 
+#
 # Built-in core plugins:
 # ----------------------
 # All built-in modules:     will.plugins
@@ -35,7 +36,7 @@
 # All modules:              plugins
 # A specific module:        plugins.module_name
 # Specific plugins:         plugins.module_name.plugin
-# 
+#
 # Plugins anywhere else on your PYTHONPATH:
 # -----------------------------------------
 # All modules:              someapp
@@ -44,7 +45,7 @@
 
 
 # By default, the list below includes all the core will plugins and
-# all your project's plugins.  
+# all your project's plugins.
 
 PLUGINS = [
     # Built-ins
@@ -62,9 +63,9 @@ PLUGINS = [
 
 # Don't load any of the plugins in this list.  Same options as above.
 PLUGIN_BLACKLIST = [
-    # "will.plugins.friendly.cookies",      # But who would deprive will of cookies??
-    "will.plugins.productivity.hangout",    # Because it requires a HANGOUT_URL
-    "will.plugins.productivity.world_time", # Because it requires a WORLD_WEATHER_ONLINE key
+    # "will.plugins.friendly.cookies",       # But who would deprive will of cookies??
+    "will.plugins.productivity.hangout",     # Because it requires a HANGOUT_URL
+    "will.plugins.productivity.world_time",  # Because it requires a WORLD_WEATHER_ONLINE key
 ]
 
 
@@ -86,17 +87,17 @@ PLUGIN_BLACKLIST = [
 # ------------------------------------------------------------------------------------
 
 # The list of rooms will should join.  Default is all rooms.
-#ROOMS = ['Hammer',]
+# ROOMS = ['Hammer',]
 
 
-# The room will will talk to if the trigger is a webhook and he isn't told a specific room. 
+# The room will will talk to if the trigger is a webhook and he isn't told a specific room.
 # Default is the first of ROOMS.
 # DEFAULT_ROOM = 'Testing, Will Kahuna'
 
 
-# Fully-qualified folders to look for templates in, beyond the two that 
+# Fully-qualified folders to look for templates in, beyond the two that
 # are always included: core will's templates folder, and your project's templates folder.
-# 
+#
 # TEMPLATE_DIRS = [
 #   os.path.abspath("other_folder/templates")
 # ]
