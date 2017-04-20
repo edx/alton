@@ -1,7 +1,6 @@
 """
 Tests for showing AMI information.
 """
-# To run these, run `python -m unittest discover` from the top of the repo
 
 import unittest
 import mock

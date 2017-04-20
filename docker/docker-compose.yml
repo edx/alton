@@ -1,0 +1,30 @@
+version: '3'
+services:
+  alton:
+    build:
+      context: ..
+      dockerfile: docker/alton/Dockerfile
+    volumes:
+     - ..:/opt/alton
+    depends_on:
+      - "redis"
+    environment:
+      # Add other 'WILL_'-prefixed envvars below as needed.
+      # All the envvars will be available in the Alton environment via will settings.
+      - WILL_USERNAME=22222_3333333@chat.hipchat.com
+      - WILL_PASSWORD=my_will_password
+      - WILL_V1_TOKEN=my_hipchat_v1_token
+      - WILL_V2_TOKEN=my_hipchat_v2_token
+      - WILL_REDIS_URL=redis://local:@redis:6379
+      - WILL_ROOMS=room1;room2;room3
+      - WILL_PIPELINE_BUCKET_NAME=my-pipeline-metadata-bucket
+      - WILL_GOCD_USERNAME=test_gocd_user
+      - WILL_GOCD_PASSWORD=test_gocd_password
+      - WILL_GOCD_SERVER_URL=https://gocd.test.edx.org
+
+  redis:
+    image: redis
+    ports:
+     - "9736:6379"
+    volumes:
+     - .dev/redis:/data
