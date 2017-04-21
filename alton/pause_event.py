@@ -162,6 +162,12 @@ class S3PauseEventOps(PauseEventOps):
         s3_file = Key(self.pipeline_bucket, filepath)
         s3_file.delete()
 
+    def _s3_file_exists(self, filepath):
+        """
+        Returns True if filepath exists in the bucket, else False.
+        """
+        return self.pipeline_bucket.get_key(filepath) is not None
+
     def _get_current_pause_events(self, pipeline_system=None, event_id=None):
         """
         Returns the current pause status of one or all pipeline systems and one or all events.
@@ -332,9 +338,13 @@ class S3PauseEventOps(PauseEventOps):
         try:
             self._delete_s3_file(current_event_filepath)
         except:  # pylint: disable=bare-except
-            # Log a failed deletion and continue.
+            # Does the file still exist? If not, continue.
+            if self._s3_file_exists(current_event_filepath):
+                # File exists but can't be deleted. Re-raise.
+                raise
+            # File does not exist. Log a failed deletion but continue.
             log.warning(
-                "File '%s' failed deletion when removing event '%s'.",
+                "File '%s' failed deletion when removing event '%s' - file did not exist.",
                 current_event_filepath, event_id
             )
         return pause_data['pipeline_system']

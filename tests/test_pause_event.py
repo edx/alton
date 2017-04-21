@@ -151,6 +151,34 @@ class TestS3PauseEventOps(unittest.TestCase):
     @patch.object(GoCDAPI, 'pause_pipeline')
     @patch.object(GoCDAPI, 'unpause_pipeline')
     @mock_s3
+    def test_remove_pipeline_event_s3_current_file_missing(self, __, ___):
+        pause_ops = self._create_s3_pause_event_ops_obj()
+        with freeze_time("2017-04-08 05:15:15") as frozen_datetime:
+            # Add a pipeline pause event.
+            # pylint: disable=protected-access
+            pause_status = pause_ops.add_pipeline_event(
+                self.TEST_USER,
+                self.TEST_PIPELINE_SYSTEM,
+                'Paused for a test reason.'
+            )
+            # Manually delete the just-created pause event file in the current/ directory.
+            current_event_filename = pause_ops._make_pause_event_filename(
+                pause_status['event_id'],
+                datetime.now().strftime(pause_ops.TIME_FORMAT),
+                self.TEST_PIPELINE_SYSTEM
+            )
+            pause_ops._delete_s3_file(current_event_filename)
+
+            # Now remove the same event at a different time.
+            # Should *not* throw an exception, despite the missing current file.
+            frozen_datetime.move_to("2017-04-08 11:42:00")
+            pause_ops.remove_pipeline_event(
+                self.TEST_USER, pause_status['event_id']
+            )
+
+    @patch.object(GoCDAPI, 'pause_pipeline')
+    @patch.object(GoCDAPI, 'unpause_pipeline')
+    @mock_s3
     def test_pipeline_interleaved_add_remove_pause_events(self, unpause_mock, __):
         """
         Interleave an event removal with an event addition to guarantee end result.
