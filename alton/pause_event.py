@@ -145,6 +145,9 @@ class S3PauseEventOps(PauseEventOps):
         except S3ResponseError as exc:
             if exc.error_code == 'NoSuchBucket':
                 self.pipeline_bucket = self.s3_conn.create_bucket(bucket_name)
+            else:
+                # In all other error cases, re-raise.
+                raise
         # Create a GoCD client for pausing/unpausing pipelines.
         self.gocd_client = GoCDAPI(gocd_username, gocd_password, gocd_url)
 
