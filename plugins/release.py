@@ -49,7 +49,7 @@ class ReleasePlugin(WillPlugin):
         """
         self.say(msg, message=message, color="red")
 
-    def _check_pipeline_system(self, pipeline_system):
+    def _check_pipeline_system(self, pipeline_system, message):
         """
         Checks a passed-in pipeline system to ensure it's a known system.
         If so, returns True.
@@ -59,7 +59,8 @@ class ReleasePlugin(WillPlugin):
             self._say_error(
                 "Pipeline system '{}' is unknown. Known systems: {}".format(
                     pipeline_system, ', '.join(PIPELINE_SYSTEM_INFO.keys())
-                )
+                ),
+                message
             )
             return False
         return True
@@ -105,7 +106,7 @@ class ReleasePlugin(WillPlugin):
         pipeline pause [pipeline_system] because [reason]
             : Pause the specified pipeline system for the specified reason.
         """
-        if not self._check_pipeline_system(pipeline_system):
+        if not self._check_pipeline_system(pipeline_system, message):
             return
 
         pause_status = self.pause_ops.add_pipeline_event(message.sender.nick, pipeline_system, pause_reason)
@@ -113,7 +114,7 @@ class ReleasePlugin(WillPlugin):
             pause_status['event_id'],
             pipeline_system
         )
-        self._say(response)
+        self._say(response, message)
 
     @respond_to(r"^pipeline[\s]+resolve[\s]+"
                 r"(?P<event_id>\w*)")  # Pipeline event to remove
@@ -125,10 +126,11 @@ class ReleasePlugin(WillPlugin):
         try:
             remove_status = self.pause_ops.remove_pipeline_event(message.sender.nick, event_id)
         except PauseEventNotFound:
-            self._say_error("Event '{}' was not found.".format(event_id))
+            self._say_error("Event '{}' was not found.".format(event_id), message)
         except MultiplePauseEventsFound:
             self._say_error(
-                "Multiple events found with ID '{}'? Should not happen - check the S3 bucket.".format(event_id)
+                "Multiple events found with ID '{}'? Should not happen - check the S3 bucket.".format(event_id),
+                message
             )
         else:
             response = "Event '{}' successfully removed from system '{}'".format(
@@ -139,7 +141,7 @@ class ReleasePlugin(WillPlugin):
                 response += " - unpaused the system."
             else:
                 response += " - {} pause event(s) remaining.".format(remove_status['num_remaining_events'])
-            self._say(response)
+            self._say(response, message)
 
     @respond_to(r"^pipeline[\s]+status[\s]*"
                 r"(?P<pipeline_system>\w*|)")  # Pipeline system for which to retrieve status.
@@ -148,9 +150,9 @@ class ReleasePlugin(WillPlugin):
         pipeline status [pipeline_system]
             : Returns the status of one or all pipeline systems.
         """
-        if not self._check_pipeline_system(pipeline_system):
+        if not self._check_pipeline_system(pipeline_system, message):
             return
 
         statuses = self.pause_ops.pipeline_status(pipeline_system)
         cmd_output = self._format_status_output(pipeline_system, statuses)
-        self._say(cmd_output)
+        self._say(cmd_output, message)
