@@ -29,7 +29,6 @@ log = logging.getLogger(__name__)
 PIPELINE_SYSTEM_INFO = {
     'edxapp': [
         'edxapp_release_advancer',
-        'prerelease_edxapp_materials_latest',
         'edxapp_cut_release_candidate'
     ]
 }
