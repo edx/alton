@@ -118,6 +118,6 @@ PLUGIN_BLACKLIST = [
 
 
 # Logging level
-LOGLEVEL = "INFO"
+LOGLEVEL = "WARN"
 
 TWOFACTOR_ISSUER = 'edX Alton'
