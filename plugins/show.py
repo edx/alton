@@ -386,9 +386,6 @@ class ShowPlugin(WillPlugin):
         }
         instances = ec2.get_all_instances(filters=edp_filter)
         elbs = elb.get_all_load_balancers()
-        lb_instance_ids = []
-        for elb in elbs:
-            lb_instance_ids = [inst.id for inst in elb.instances]
         if not instances:
             self.say('No instances found. The input may be misspelled.', message, color='red')
             return
@@ -425,6 +422,7 @@ class ShowPlugin(WillPlugin):
 
                 elb_list = []
                 for elb in elbs:
+                    lb_instance_ids = [inst.id for inst in elb.instances]
                     if instance.id in lb_instance_ids:
                         elb_list.append(elb.name)
 
