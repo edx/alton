@@ -378,13 +378,14 @@ class ShowPlugin(WillPlugin):
         """
         self.say("Reticulating splines...", message)
         ec2 = boto.connect_ec2(profile_name=dep)
+        elb = boto.connect_elb(profile_name=dep)
         edp_filter = {
             "tag:environment": env,
             "tag:deployment": dep,
             "tag:play": play,
         }
         instances = ec2.get_all_instances(filters=edp_filter)
-
+        elbs = elb.get_all_load_balancers()
         if not instances:
             self.say('No instances found. The input may be misspelled.', message, color='red')
             return
@@ -419,17 +420,15 @@ class ShowPlugin(WillPlugin):
                             refs.append(
                                 "{}_version={}".format(key, value.split()[1]))
 
-                def instance_name(instance):
-                    """
-                    Return name of the instance.
-                    """
-                    return instance.name
-                elbs = map(instance_name,
-                           self._instance_elbs(instance.id, dep))
+                elb_list = []
+                for elb in elbs:
+                    lb_instance_ids = [inst.id for inst in elb.instances]
+                    if instance.id in lb_instance_ids:
+                        elb_list.append(elb.name)
 
                 all_data = izip_longest(
                     [instance.private_dns_name],
-                    refs, elbs, [ami_id],
+                    refs, elb_list, [ami_id],
                     fillvalue="",
                 )
                 for inst, ref, elb, ami in all_data:
