@@ -451,10 +451,13 @@ class ShowPlugin(WillPlugin):
                                                line[1].ljust(ref_len),
                                                line[2].ljust(elb_len),
                                                line[3].ljust(ami_len),))
-
-        data = list(self._get_chunks(output, 65))
-        for chunk in data:
-            self.say("/code {}".format("\n".join(chunk)), message)
+        # Only make chunks of data exceeding the limit
+        if len(output) > 65:
+            data = list(self._get_chunks(output, 65))
+            for chunk in data:
+                self.say("/code {}".format("\n".join(chunk)), message)
+        else:
+            self.say("/code {}".format("\n".join(output)), message)
         logging.error(output_table)
 
     def _get_chunks(self, data, size):
