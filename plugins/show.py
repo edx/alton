@@ -452,8 +452,20 @@ class ShowPlugin(WillPlugin):
                                                line[2].ljust(elb_len),
                                                line[3].ljust(ami_len),))
 
+        data = list(self._get_chunks(output, 65))
+        for chunk in data:
+            self.say("/code {}".format("\n".join(chunk)), message)
         logging.error(output_table)
-        self.say("/code {}".format("\n".join(output)), message)
+
+    def _get_chunks(self, data, size):
+        """
+        Yields sized chunks for the data
+        passed to it, issue related to Hiphcat
+        limitation of not displaying a message
+        having more than 10000 characters.
+        """
+        for items in range(0, len(data), size):
+            yield data[items:items + size]
 
     def _get_ami_versions(self, ami_id, message=None):
         """
